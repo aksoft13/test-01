@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VIDEO EDITOR — PORTFOLIO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+KR:wght@300;400;500&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #060608;
+    --surface: #0d0d12;
+    --card: #111118;
+    --accent: #e8ff47;
+    --accent2: #ff3c3c;
+    --text: #f0ede8;
+    --muted: #6b6b7a;
+    --border: #1e1e2a;
+    --glow: rgba(232,255,71,0.15);
+  }
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans KR', sans-serif;
+    font-weight: 300;
+    overflow-x: hidden;
+    cursor: none;
+  }
+
+  /* CUSTOM CURSOR */
+  .cursor {
+    position: fixed;
+    width: 10px; height: 10px;
+    background: var(--accent);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: transform 0.1s;
+    mix-blend-mode: difference;
+  }
+  .cursor-ring {
+    position: fixed;
+    width: 36px; height: 36px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9998;
+    transform: translate(-50%, -50%);
+    transition: all 0.25s ease;
+    mix-blend-mode: difference;
+    opacity: 0.6;
+  }
+  .cursor-ring.hovered { transform: translate(-50%, -50%) scale(2); opacity: 0.3; }
+
+  /* NOISE TEXTURE OVERLAY */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9000;
+    opacity: 0.5;
+  }
+
+  /* NAV */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 4rem;
+    background: linear-gradient(180deg, rgba(6,6,8,0.95) 0%, transparent 100%);
+    backdrop-filter: blur(2px);
+  }
+
+  .nav-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 2.5rem;
+    list-style: none;
+  }
+
+  .nav-links a {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-decoration: none;
+    text-transform: uppercase;
+    transition: color 0.3s;
+    position: relative;
+  }
+
+  .nav-links a::after {
+    content: '';
+    position: absolute;
+    bottom: -4px; left: 0;
+    width: 0; height: 1px;
+    background: var(--accent);
+    transition: width 0.3s;
+  }
+
+  .nav-links a:hover { color: var(--accent); }
+  .nav-links a:hover::after { width: 100%; }
+
+  .nav-cta {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--bg);
+    background: var(--accent);
+    padding: 0.6rem 1.4rem;
+    text-decoration: none;
+    transition: all 0.3s;
+  }
+
+  .nav-cta:hover { background: #fff; transform: translateY(-2px); }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 6rem 4rem 4rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 70% 40%, rgba(232,255,71,0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 60% at 20% 80%, rgba(255,60,60,0.05) 0%, transparent 60%);
+  }
+
+  .hero-scanlines {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255,255,255,0.01) 2px,
+      rgba(255,255,255,0.01) 4px
+    );
+    pointer-events: none;
+  }
+
+  .hero-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.3em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    opacity: 0;
+    animation: fadeUp 0.8s 0.2s forwards;
+  }
+
+  .hero-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(5rem, 14vw, 14rem);
+    line-height: 0.9;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    overflow: hidden;
+    opacity: 0;
+    animation: fadeUp 0.9s 0.4s forwards;
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-title .accent-word { color: var(--accent); }
+
+  .hero-subtitle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: 2rem;
+    opacity: 0;
+    animation: fadeUp 0.9s 0.7s forwards;
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-desc {
+    max-width: 360px;
+    font-size: 0.9rem;
+    line-height: 1.8;
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  .hero-stats {
+    display: flex;
+    gap: 3rem;
+  }
+
+  .stat-item { text-align: right; }
+
+  .stat-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.8rem;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-top: 0.2rem;
+  }
+
+  .scroll-indicator {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    opacity: 0;
+    animation: fadeUp 0.8s 1.2s forwards;
+  }
+
+  .scroll-line {
+    width: 1px;
+    height: 48px;
+    background: linear-gradient(180deg, var(--accent) 0%, transparent 100%);
+    animation: scrollPulse 2s infinite;
+  }
+
+  .scroll-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+  }
+
+  /* REEL STRIP */
+  .reel-strip {
+    padding: 1.5rem 0;
+    background: var(--accent);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .reel-track {
+    display: flex;
+    gap: 3rem;
+    animation: marquee 20s linear infinite;
+    white-space: nowrap;
+  }
+
+  .reel-item {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.2em;
+    color: var(--bg);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+  }
+
+  .reel-dot {
+    width: 6px; height: 6px;
+    background: rgba(6,6,8,0.4);
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ABOUT */
+  .about {
+    padding: 8rem 4rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8rem;
+    align-items: center;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.3em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .section-label::before {
+    content: '';
+    display: block;
+    width: 24px; height: 1px;
+    background: var(--accent);
+  }
+
+  .about-heading {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2.5rem, 5vw, 5rem);
+    line-height: 1;
+    letter-spacing: 0.02em;
+    margin-bottom: 2rem;
+  }
+
+  .about-body {
+    font-size: 0.95rem;
+    line-height: 2;
+    color: var(--muted);
+    margin-bottom: 2.5rem;
+  }
+
+  .about-body strong {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .skills-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .skill-tag {
+    border: 1px solid var(--border);
+    padding: 0.8rem 1.2rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .skill-tag::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    transform: translateX(-100%);
+    transition: transform 0.3s;
+    z-index: -1;
+  }
+
+  .skill-tag:hover { color: var(--bg); border-color: var(--accent); }
+  .skill-tag:hover::before { transform: translateX(0); }
+
+  .about-visual {
+    position: relative;
+    aspect-ratio: 4/5;
+    background: var(--card);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .about-visual-inner {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--surface) 0%, var(--bg) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .camera-icon {
+    font-size: 5rem;
+    opacity: 0.08;
+    position: absolute;
+    bottom: 2rem;
+    right: 2rem;
+  }
+
+  .about-visual-label {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 1.5rem;
+    background: linear-gradient(0deg, rgba(6,6,8,0.95) 0%, transparent 100%);
+  }
+
+  .available-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(232,255,71,0.1);
+    border: 1px solid rgba(232,255,71,0.3);
+    padding: 0.4rem 0.8rem;
+  }
+
+  .badge-dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  .badge-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .about-visual-big-text {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 8rem;
+    color: rgba(255,255,255,0.03);
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+    letter-spacing: 0.1em;
+  }
+
+  /* PORTFOLIO */
+  .portfolio {
+    padding: 6rem 4rem;
+    background: var(--surface);
+  }
+
+  .portfolio-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 4rem;
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 4rem;
+  }
+
+  .portfolio-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2.5rem, 5vw, 5rem);
+    line-height: 1;
+    letter-spacing: 0.02em;
+  }
+
+  .filter-tabs {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .filter-btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: none;
+    transition: all 0.3s;
+  }
+
+  .filter-btn.active, .filter-btn:hover {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+
+  .portfolio-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-template-rows: auto;
+    gap: 1.5rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .project-card {
+    position: relative;
+    overflow: hidden;
+    background: var(--card);
+    border: 1px solid var(--border);
+    cursor: none;
+    group: true;
+  }
+
+  .project-card:nth-child(1) { grid-column: span 7; grid-row: span 2; }
+  .project-card:nth-child(2) { grid-column: span 5; }
+  .project-card:nth-child(3) { grid-column: span 5; }
+  .project-card:nth-child(4) { grid-column: span 4; }
+  .project-card:nth-child(5) { grid-column: span 4; }
+  .project-card:nth-child(6) { grid-column: span 4; }
+
+  .card-thumb {
+    aspect-ratio: 16/9;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .project-card:nth-child(1) .card-thumb { aspect-ratio: 16/10; }
+
+  .card-thumb-bg {
+    position: absolute;
+    inset: 0;
+    transition: transform 0.6s cubic-bezier(0.25,0.46,0.45,0.94);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .project-card:hover .card-thumb-bg { transform: scale(1.08); }
+
+  .thumb-1 { background: linear-gradient(135deg, #0a0a15 0%, #1a0a2e 50%, #2d0a3e 100%); }
+  .thumb-2 { background: linear-gradient(135deg, #0a1510 0%, #0a2e1a 100%); }
+  .thumb-3 { background: linear-gradient(135deg, #150a0a 0%, #2e0a0a 100%); }
+  .thumb-4 { background: linear-gradient(135deg, #0a0a15 0%, #0a1530 100%); }
+  .thumb-5 { background: linear-gradient(135deg, #15100a 0%, #2e1a0a 100%); }
+  .thumb-6 { background: linear-gradient(135deg, #0a1515 0%, #0a2e2e 100%); }
+
+  .thumb-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3.5rem;
+    letter-spacing: 0.1em;
+    opacity: 0.07;
+    color: #fff;
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    line-height: 1;
+  }
+
+  .play-btn {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.8);
+    width: 54px; height: 54px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all 0.3s;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(4px);
+  }
+
+  .play-btn::after {
+    content: '';
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 8px 0 8px 14px;
+    border-color: transparent transparent transparent rgba(255,255,255,0.9);
+    margin-left: 3px;
+  }
+
+  .project-card:hover .play-btn {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  .card-info {
+    padding: 1.2rem 1.4rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .card-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  .card-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .card-year {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+
+  .card-arrow {
+    width: 32px; height: 32px;
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    color: var(--muted);
+    transition: all 0.3s;
+  }
+
+  .project-card:hover .card-arrow {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    transform: rotate(45deg);
+  }
+
+  /* TOOLS */
+  .tools {
+    padding: 8rem 4rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .tools-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-top: 4rem;
+  }
+
+  .tool-item {
+    background: var(--bg);
+    padding: 2.5rem 2rem;
+    text-align: center;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .tool-item::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    transform: scaleY(0);
+    transform-origin: bottom;
+    transition: transform 0.4s cubic-bezier(0.25,0.46,0.45,0.94);
+    z-index: 0;
+  }
+
+  .tool-item:hover::before { transform: scaleY(1); }
+
+  .tool-item:hover .tool-name,
+  .tool-item:hover .tool-type { color: var(--bg); }
+
+  .tool-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    position: relative;
+    z-index: 1;
+    display: block;
+  }
+
+  .tool-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.3rem;
+    position: relative;
+    z-index: 1;
+    transition: color 0.3s;
+  }
+
+  .tool-type {
+    font-size: 0.7rem;
+    color: var(--muted);
+    position: relative;
+    z-index: 1;
+    transition: color 0.3s;
+  }
+
+  /* PROCESS */
+  .process {
+    padding: 8rem 4rem;
+    background: var(--surface);
+  }
+
+  .process-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .process-steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    margin-top: 4rem;
+    border: 1px solid var(--border);
+  }
+
+  .step {
+    background: var(--bg);
+    padding: 3rem 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .step-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 5rem;
+    color: rgba(232,255,71,0.08);
+    line-height: 1;
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+  }
+
+  .step-icon {
+    font-size: 1.6rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .step-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.5rem;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.8rem;
+  }
+
+  .step-desc {
+    font-size: 0.82rem;
+    line-height: 1.8;
+    color: var(--muted);
+  }
+
+  /* TESTIMONIALS */
+  .testimonials {
+    padding: 8rem 4rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .testi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-top: 4rem;
+  }
+
+  .testi-card {
+    border: 1px solid var(--border);
+    padding: 2.5rem;
+    background: var(--card);
+    position: relative;
+    transition: border-color 0.3s;
+  }
+
+  .testi-card:hover { border-color: rgba(232,255,71,0.3); }
+
+  .quote-mark {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 4rem;
+    color: var(--accent);
+    opacity: 0.2;
+    line-height: 1;
+    margin-bottom: 1rem;
+  }
+
+  .testi-text {
+    font-size: 0.88rem;
+    line-height: 1.9;
+    color: var(--muted);
+    margin-bottom: 2rem;
+    font-style: italic;
+  }
+
+  .testi-author {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .author-avatar {
+    width: 40px; height: 40px;
+    background: var(--border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+  }
+
+  .author-info { flex: 1; }
+
+  .author-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .author-role {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-top: 0.2rem;
+  }
+
+  /* CONTACT */
+  .contact {
+    padding: 8rem 4rem;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .contact::before {
+    content: 'CONTACT';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22vw;
+    color: rgba(255,255,255,0.015);
+    pointer-events: none;
+    white-space: nowrap;
+    letter-spacing: 0.1em;
+  }
+
+  .contact-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  .contact-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8rem;
+    margin-top: 5rem;
+    align-items: start;
+  }
+
+  .contact-heading {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(3rem, 6vw, 7rem);
+    line-height: 0.95;
+    letter-spacing: 0.02em;
+    margin-bottom: 2rem;
+  }
+
+  .contact-heading .line2 { color: var(--accent); }
+
+  .contact-info {
+    font-size: 0.9rem;
+    line-height: 2;
+    color: var(--muted);
+    margin-bottom: 3rem;
+  }
+
+  .contact-links {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .contact-link {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-decoration: none;
+    text-transform: uppercase;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid var(--border);
+    transition: all 0.3s;
+  }
+
+  .contact-link:hover { color: var(--accent); padding-left: 0.5rem; }
+  .contact-link .link-icon { font-size: 1rem; }
+
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-input,
+  .form-textarea {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 0.9rem;
+    padding: 1rem 1.2rem;
+    outline: none;
+    transition: border-color 0.3s;
+    -webkit-appearance: none;
+  }
+
+  .form-input:focus,
+  .form-textarea:focus { border-color: var(--accent); }
+
+  .form-textarea { resize: none; height: 120px; }
+
+  .submit-btn {
+    width: 100%;
+    padding: 1.2rem;
+    background: var(--accent);
+    color: var(--bg);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.2em;
+    border: none;
+    cursor: none;
+    transition: all 0.3s;
+  }
+
+  .submit-btn:hover { background: #fff; transform: translateY(-2px); }
+
+  /* FOOTER */
+  footer {
+    padding: 2rem 4rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.2rem;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+  }
+
+  .footer-copy {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  @keyframes scrollPulse {
+    0%, 100% { opacity: 0.4; transform: scaleY(1); }
+    50% { opacity: 1; transform: scaleY(1.2); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(232,255,71,0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(232,255,71,0); }
+  }
+
+  /* REVEAL ANIMATION */
+  .reveal {
+    opacity: 0;
+    transform: translateY(40px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* HOVER GLOW ON CARDS */
+  .project-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(232,255,71,0.03) 0%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.4s;
+    pointer-events: none;
+  }
+
+  .project-card:hover::after { opacity: 1; }
+
+  @media (max-width: 768px) {
+    nav { padding: 1.2rem 1.5rem; }
+    .nav-links { display: none; }
+    .hero { padding: 5rem 1.5rem 3rem; }
+    .hero-subtitle-row { flex-direction: column; align-items: flex-start; gap: 2rem; }
+    .hero-stats { gap: 2rem; }
+    .about { grid-template-columns: 1fr; padding: 5rem 1.5rem; gap: 3rem; }
+    .portfolio { padding: 5rem 1.5rem; }
+    .portfolio-header { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+    .portfolio-grid { grid-template-columns: 1fr; }
+    .project-card:nth-child(n) { grid-column: span 1; }
+    .tools { padding: 5rem 1.5rem; }
+    .tools-grid { grid-template-columns: repeat(3, 1fr); }
+    .process { padding: 5rem 1.5rem; }
+    .process-steps { grid-template-columns: 1fr 1fr; }
+    .testi-grid { grid-template-columns: 1fr; }
+    .contact { padding: 5rem 1.5rem; }
+    .contact-grid { grid-template-columns: 1fr; gap: 3rem; }
+    footer { flex-direction: column; gap: 1rem; text-align: center; padding: 2rem 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">FRAME.EDIT</div>
+  <ul class="nav-links">
+    <li><a href="#about">소개</a></li>
+    <li><a href="#portfolio">작업물</a></li>
+    <li><a href="#tools">툴</a></li>
+    <li><a href="#contact">연락</a></li>
+  </ul>
+  <a href="#contact" class="nav-cta">프로젝트 의뢰</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="top">
+  <div class="hero-bg"></div>
+  <div class="hero-scanlines"></div>
+
+  <div class="hero-tag">✦ VIDEO EDITOR &amp; AI MARKETING STRATEGIST</div>
+  <h1 class="hero-title">
+    VISUAL<br>
+    <span class="accent-word">STORY</span><br>
+    TELLER
+  </h1>
+
+  <div class="hero-subtitle-row">
+    <p class="hero-desc">
+      브랜드의 이야기를 영상으로 담아냅니다.<br>
+      <strong style="color:var(--text)">AI 기반 마케팅 전략</strong>과 감각적인 편집으로
+      시청자의 시선을 사로잡는 콘텐츠를 제작합니다.
+    </p>
+    <div class="hero-stats">
+      <div class="stat-item">
+        <div class="stat-num">80+</div>
+        <div class="stat-label">완료 프로젝트</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">5+</div>
+        <div class="stat-label">경력 연수</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">2M+</div>
+        <div class="stat-label">총 조회수</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll-indicator">
+    <div class="scroll-text">SCROLL</div>
+    <div class="scroll-line"></div>
+  </div>
+</section>
+
+<!-- REEL STRIP -->
+<div class="reel-strip">
+  <div class="reel-track">
+    <span class="reel-item">BRAND FILM <span class="reel-dot"></span></span>
+    <span class="reel-item">SNS CONTENT <span class="reel-dot"></span></span>
+    <span class="reel-item">YOUTUBE <span class="reel-dot"></span></span>
+    <span class="reel-item">AI MARKETING <span class="reel-dot"></span></span>
+    <span class="reel-item">MOTION GRAPHIC <span class="reel-dot"></span></span>
+    <span class="reel-item">COLOR GRADING <span class="reel-dot"></span></span>
+    <span class="reel-item">BRAND FILM <span class="reel-dot"></span></span>
+    <span class="reel-item">SNS CONTENT <span class="reel-dot"></span></span>
+    <span class="reel-item">YOUTUBE <span class="reel-dot"></span></span>
+    <span class="reel-item">AI MARKETING <span class="reel-dot"></span></span>
+    <span class="reel-item">MOTION GRAPHIC <span class="reel-dot"></span></span>
+    <span class="reel-item">COLOR GRADING <span class="reel-dot"></span></span>
+  </div>
+</div>
+
+<!-- ABOUT -->
+<section class="about" id="about">
+  <div class="reveal">
+    <div class="section-label">ABOUT</div>
+    <h2 class="about-heading">FRAME<br>BY<br>FRAME</h2>
+    <p class="about-body">
+      영상 편집의 기술과 <strong>AI 마케팅 전략</strong>을 결합하여 브랜드 가치를
+      극대화합니다. Premiere Pro, DaVinci Resolve, After Effects를 기반으로
+      광고, 유튜브, SNS 콘텐츠까지 다양한 형식의 영상을 제작합니다.
+      <br><br>
+      단순한 편집이 아닌 <strong>데이터 기반 스토리텔링</strong>으로 시청자의
+      행동을 이끌어내는 영상을 만듭니다. AI 툴을 활용한 빠른 제작과
+      정교한 후반작업으로 최고의 결과물을 제공합니다.
+    </p>
+    <div class="skills-grid">
+      <div class="skill-tag">영상 편집</div>
+      <div class="skill-tag">모션 그래픽</div>
+      <div class="skill-tag">컬러 그레이딩</div>
+      <div class="skill-tag">AI 마케팅</div>
+      <div class="skill-tag">SNS 콘텐츠</div>
+      <div class="skill-tag">브랜드 영상</div>
+    </div>
+  </div>
+  <div class="about-visual reveal">
+    <div class="about-visual-inner">
+      <div class="about-visual-big-text">EDIT</div>
+      <div class="camera-icon">🎬</div>
+    </div>
+    <div class="about-visual-label">
+      <div class="available-badge">
+        <div class="badge-dot"></div>
+        <span class="badge-text">현재 프로젝트 수락 중</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PORTFOLIO -->
+<section class="portfolio" id="portfolio">
+  <div style="max-width:1400px;margin:0 auto;margin-bottom:4rem;">
+    <div class="section-label reveal">PORTFOLIO</div>
+    <div class="portfolio-header reveal">
+      <h2 class="portfolio-title">SELECTED<br>WORKS</h2>
+      <div class="filter-tabs">
+        <button class="filter-btn active">전체</button>
+        <button class="filter-btn">광고</button>
+        <button class="filter-btn">유튜브</button>
+        <button class="filter-btn">SNS</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="portfolio-grid reveal">
+    <!-- CARD 1 (LARGE) -->
+    <div class="project-card">
+      <div class="card-thumb">
+        <div class="card-thumb-bg thumb-1">
+          <div class="thumb-label">01</div>
+        </div>
+        <div class="play-btn"></div>
+      </div>
+      <div class="card-info">
+        <div class="card-meta">
+          <div class="card-title">뷰티 브랜드 리런칭 캠페인</div>
+          <div class="card-tag">Brand Film · 광고</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <span class="card-year">2024</span>
+          <div class="card-arrow">→</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 2 -->
+    <div class="project-card">
+      <div class="card-thumb">
+        <div class="card-thumb-bg thumb-2">
+          <div class="thumb-label">02</div>
+        </div>
+        <div class="play-btn"></div>
+      </div>
+      <div class="card-info">
+        <div class="card-meta">
+          <div class="card-title">테크 스타트업 유튜브 시리즈</div>
+          <div class="card-tag">YouTube · 시리즈</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <span class="card-year">2024</span>
+          <div class="card-arrow">→</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 3 -->
+    <div class="project-card">
+      <div class="card-thumb">
+        <div class="card-thumb-bg thumb-3">
+          <div class="thumb-label">03</div>
+        </div>
+        <div class="play-btn"></div>
+      </div>
+      <div class="card-info">
+        <div class="card-meta">
+          <div class="card-title">패션 브랜드 인스타그램 릴스</div>
+          <div class="card-tag">SNS · Instagram</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <span class="card-year">2024</span>
+          <div class="card-arrow">→</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 4 -->
+    <div class="project-card">
+      <div class="card-thumb">
+        <div class="card-thumb-bg thumb-4">
+          <div class="thumb-label">04</div>
+        </div>
+        <div class="play-btn"></div>
+      </div>
+      <div class="card-info">
+        <div class="card-meta">
+          <div class="card-title">음식 브랜드 틱톡 광고</div>
+          <div class="card-tag">TikTok · 광고</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <span class="card-year">2023</span>
+          <div class="card-arrow">→</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 5 -->
+    <div class="project-card">
+      <div class="card-thumb">
+        <div class="card-thumb-bg thumb-5">
+          <div class="thumb-label">05</div>
+        </div>
+        <div class="play-btn"></div>
+      </div>
+      <div class="card-info">
+        <div class="card-meta">
+          <div class="card-title">기업 홍보 영상</div>
+          <div class="card-tag">Corporate · 홍보</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <span class="card-year">2023</span>
+          <div class="card-arrow">→</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 6 -->
+    <div class="project-card">
+      <div class="card-thumb">
+        <div class="card-thumb-bg thumb-6">
+          <div class="thumb-label">06</div>
+        </div>
+        <div class="play-btn"></div>
+      </div>
+      <div class="card-info">
+        <div class="card-meta">
+          <div class="card-title">AI 기반 숏폼 콘텐츠</div>
+          <div class="card-tag">Shorts · AI</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <span class="card-year">2023</span>
+          <div class="card-arrow">→</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TOOLS -->
+<section class="tools" id="tools">
+  <div class="section-label reveal">TOOLS &amp; SOFTWARE</div>
+  <h2 class="about-heading reveal">MY<br>TOOLBOX</h2>
+
+  <div class="tools-grid reveal">
+    <div class="tool-item">
+      <span class="tool-icon">🎬</span>
+      <div class="tool-name">Premiere Pro</div>
+      <div class="tool-type">편집</div>
+    </div>
+    <div class="tool-item">
+      <span class="tool-icon">🎨</span>
+      <div class="tool-name">DaVinci Resolve</div>
+      <div class="tool-type">컬러 그레이딩</div>
+    </div>
+    <div class="tool-item">
+      <span class="tool-icon">✨</span>
+      <div class="tool-name">After Effects</div>
+      <div class="tool-type">모션 그래픽</div>
+    </div>
+    <div class="tool-item">
+      <span class="tool-icon">🤖</span>
+      <div class="tool-name">Runway ML</div>
+      <div class="tool-type">AI 영상 생성</div>
+    </div>
+    <div class="tool-item">
+      <span class="tool-icon">🔊</span>
+      <div class="tool-name">Audition</div>
+      <div class="tool-type">오디오 편집</div>
+    </div>
+    <div class="tool-item">
+      <span class="tool-icon">📊</span>
+      <div class="tool-name">ChatGPT</div>
+      <div class="tool-type">마케팅 전략</div>
+    </div>
+    <div class="tool-item">
+      <span class="tool-icon">🖼️</span>
+      <div class="tool-name">Midjourney</div>
+      <div class="tool-type">AI 이미지</div>
+    </div>
+    <div class="tool-item">
+      <span class="tool-icon">🎵</span>
+      <div class="tool-name">Suno AI</div>
+      <div class="tool-type">AI 음악</div>
+    </div>
+    <div class="tool-item">
+      <span class="tool-icon">📱</span>
+      <div class="tool-name">CapCut</div>
+      <div class="tool-type">숏폼 편집</div>
+    </div>
+    <div class="tool-item">
+      <span class="tool-icon">📈</span>
+      <div class="tool-name">Analytics</div>
+      <div class="tool-type">데이터 분석</div>
+    </div>
+  </div>
+</section>
+
+<!-- PROCESS -->
+<section class="process">
+  <div class="process-inner">
+    <div class="section-label reveal">PROCESS</div>
+    <h2 class="about-heading reveal">HOW<br>I WORK</h2>
+
+    <div class="process-steps reveal">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-icon">💬</div>
+        <div class="step-title">브리핑</div>
+        <p class="step-desc">프로젝트 목표, 타겟 오디언스, 채널 전략을 파악합니다. AI 분석으로 트렌드를 파악하여 방향을 설정합니다.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-icon">✏️</div>
+        <div class="step-title">기획</div>
+        <p class="step-desc">스크립트 작성부터 콘티까지, 데이터 기반의 콘텐츠 전략으로 시청자의 참여를 극대화하는 구성을 설계합니다.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <div class="step-icon">🎬</div>
+        <div class="step-title">편집</div>
+        <p class="step-desc">컷 편집, 컬러 그레이딩, 모션 그래픽, 사운드 디자인까지 모든 후반작업을 최고 수준으로 진행합니다.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">04</div>
+        <div class="step-icon">🚀</div>
+        <div class="step-title">납품 &amp; 분석</div>
+        <p class="step-desc">최적화된 포맷으로 납품 후 성과를 모니터링합니다. 데이터를 바탕으로 다음 프로젝트에 반영합니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="testimonials">
+  <div class="section-label reveal">TESTIMONIALS</div>
+  <h2 class="about-heading reveal">CLIENT<br>REVIEWS</h2>
+
+  <div class="testi-grid reveal">
+    <div class="testi-card">
+      <div class="quote-mark">"</div>
+      <p class="testi-text">AI를 활용한 마케팅 전략과 영상 편집 실력이 탁월했습니다. 캠페인 영상 하나로 브랜드 인지도가 크게 올라갔어요.</p>
+      <div class="testi-author">
+        <div class="author-avatar">🎯</div>
+        <div class="author-info">
+          <div class="author-name">김지원</div>
+          <div class="author-role">뷰티 브랜드 마케팅 팀장</div>
+        </div>
+      </div>
+    </div>
+    <div class="testi-card">
+      <div class="quote-mark">"</div>
+      <p class="testi-text">유튜브 채널 성장을 위한 영상 전략부터 편집까지, 구독자 수가 3개월 만에 2배로 늘었습니다. 강력 추천합니다.</p>
+      <div class="testi-author">
+        <div class="author-avatar">📊</div>
+        <div class="author-info">
+          <div class="author-name">박성민</div>
+          <div class="author-role">테크 스타트업 대표</div>
+        </div>
+      </div>
+    </div>
+    <div class="testi-card">
+      <div class="quote-mark">"</div>
+      <p class="testi-text">숏폼 콘텐츠 제작 속도와 퀄리티가 놀랍습니다. AI 툴을 적절히 활용해 납기도 빠르고 결과물도 훌륭합니다.</p>
+      <div class="testi-author">
+        <div class="author-avatar">✨</div>
+        <div class="author-info">
+          <div class="author-name">이수진</div>
+          <div class="author-role">패션 브랜드 SNS 담당자</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section class="contact" id="contact">
+  <div class="contact-inner">
+    <div class="section-label reveal">CONTACT</div>
+    <div class="contact-grid">
+      <div class="reveal">
+        <h2 class="contact-heading">
+          LET'S<br>
+          <span class="line2">CREATE</span><br>
+          TOGETHER
+        </h2>
+        <p class="contact-info">
+          새로운 프로젝트, 콜라보레이션,<br>
+          또는 단순한 문의도 환영합니다.
+        </p>
+        <div class="contact-links">
+          <a href="mailto:hello@frameedit.kr" class="contact-link">
+            <span class="link-icon">✉</span> hello@frameedit.kr
+          </a>
+          <a href="https://instagram.com" class="contact-link" target="_blank">
+            <span class="link-icon">📸</span> @frame.edit
+          </a>
+          <a href="https://youtube.com" class="contact-link" target="_blank">
+            <span class="link-icon">▶</span> YouTube 채널
+          </a>
+          <a href="#" class="contact-link">
+            <span class="link-icon">💼</span> 포트폴리오 PDF 다운로드
+          </a>
+        </div>
+      </div>
+
+      <div class="reveal">
+        <div class="form-group">
+          <label class="form-label">이름</label>
+          <input type="text" class="form-input" placeholder="홍길동">
+        </div>
+        <div class="form-group">
+          <label class="form-label">이메일</label>
+          <input type="email" class="form-input" placeholder="example@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">프로젝트 종류</label>
+          <input type="text" class="form-input" placeholder="브랜드 영상 / 유튜브 / SNS 콘텐츠">
+        </div>
+        <div class="form-group">
+          <label class="form-label">메시지</label>
+          <textarea class="form-textarea" placeholder="프로젝트에 대해 알려주세요..."></textarea>
+        </div>
+        <button class="submit-btn">SEND MESSAGE →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">FRAME.EDIT</div>
+  <div class="footer-copy">© 2025 Frame.Edit — All Rights Reserved</div>
+  <div class="footer-copy">Seoul, Korea</div>
+</footer>
+
+<script>
+  // CUSTOM CURSOR
+  const cursor = document.getElementById('cursor');
+  const ring = document.getElementById('cursorRing');
+
+  document.addEventListener('mousemove', (e) => {
+    cursor.style.left = e.clientX + 'px';
+    cursor.style.top = e.clientY + 'px';
+    ring.style.left = e.clientX + 'px';
+    ring.style.top = e.clientY + 'px';
+  });
+
+  document.querySelectorAll('a, button, .project-card, .tool-item, .skill-tag').forEach(el => {
+    el.addEventListener('mouseenter', () => ring.classList.add('hovered'));
+    el.addEventListener('mouseleave', () => ring.classList.remove('hovered'));
+  });
+
+  // SCROLL REVEAL
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) e.target.classList.add('visible');
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // FILTER BUTTONS
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // SUBMIT BUTTON
+  document.querySelector('.submit-btn').addEventListener('click', () => {
+    const btn = document.querySelector('.submit-btn');
+    btn.textContent = '전송 완료 ✓';
+    btn.style.background = '#2a2a2a';
+    btn.style.color = 'var(--accent)';
+    setTimeout(() => {
+      btn.textContent = 'SEND MESSAGE →';
+      btn.style.background = 'var(--accent)';
+      btn.style.color = 'var(--bg)';
+    }, 3000);
+  });
+</script>
+</body>
+</html>
