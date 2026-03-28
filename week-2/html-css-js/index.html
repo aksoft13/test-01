@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML 태그 예시</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 다크모드 토글 -->
+    <button id="dark-toggle">🌙 다크모드</button>
+
+    <!-- 토스트 알림 -->
+    <div id="toast">✅ 제출 완료!</div>
+
+    <!-- 제목 태그 -->
+    <h1 id="typing-title"></h1>
+    <h2>제목 2단계</h2>
+    <h3>제목 3단계</h3>
+    <h4>제목 4단계</h4>
+    <h5>제목 5단계</h5>
+    <h6>제목 6단계</h6>
+
+    <!-- 단락 및 텍스트 -->
+    <p>일반 단락 텍스트입니다.</p>
+    <p>텍스트 <strong>굵게</strong>, <em>기울임</em>, <u>밑줄</u>, <s>취소선</s></p>
+    <p>작은 글씨: <small>small 태그</small> | 위 첨자: x<sup>2</sup> | 아래 첨자: H<sub>2</sub>O</p>
+    <p><mark>형광펜 강조</mark> | <code>인라인 코드</code></p>
+    <blockquote>
+        인용문입니다. blockquote 태그를 사용합니다.
+    </blockquote>
+    <pre>
+이 텍스트는
+    들여쓰기와 줄바꿈이
+        그대로 유지됩니다.
+    </pre>
+
+    <!-- 링크 및 이미지 -->
+    <a href="https://www.naver.com" target="_blank">네이버 (새 탭으로 열기)</a>
+    <br>
+    <img src="https://via.placeholder.com/150" alt="예시 이미지" width="150" height="150">
+
+    <!-- 구분선 -->
+    <hr>
+
+    <!-- 목록 -->
+    <h3>비순서 목록 (ul)</h3>
+    <ul>
+        <li>항목 1</li>
+        <li>항목 2
+            <ul>
+                <li>중첩 항목 2-1</li>
+                <li>중첩 항목 2-2</li>
+            </ul>
+        </li>
+        <li>항목 3</li>
+    </ul>
+
+    <h3>순서 목록 (ol)</h3>
+    <ol>
+        <li>첫 번째</li>
+        <li>두 번째</li>
+        <li>세 번째</li>
+    </ol>
+
+    <h3>정의 목록 (dl)</h3>
+    <dl>
+        <dt>HTML</dt>
+        <dd>HyperText Markup Language의 약자</dd>
+        <dt>CSS</dt>
+        <dd>Cascading Style Sheets의 약자</dd>
+    </dl>
+
+    <!-- 테이블 -->
+    <h3>테이블 (table)</h3>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>이름</th>
+                <th>나이</th>
+                <th>직업</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>홍길동</td>
+                <td>25</td>
+                <td>개발자</td>
+            </tr>
+            <tr>
+                <td>김철수</td>
+                <td>30</td>
+                <td>디자이너</td>
+            </tr>
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="3">총 2명</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <!-- 폼 -->
+    <h3>폼 (form)</h3>
+    <form action="#" method="post">
+        <label for="name">이름:</label>
+        <input type="text" id="name" name="name" placeholder="이름 입력">
+        <br><br>
+
+        <label for="email">이메일:</label>
+        <input type="email" id="email" name="email" placeholder="이메일 입력">
+        <br><br>
+
+        <label for="password">비밀번호:</label>
+        <input type="password" id="password" name="password">
+        <br><br>
+
+        <label for="age">나이:</label>
+        <input type="number" id="age" name="age" min="0" max="120">
+        <br><br>
+
+        <label>성별:</label>
+        <input type="radio" name="gender" value="male"> 남성
+        <input type="radio" name="gender" value="female"> 여성
+        <br><br>
+
+        <label>관심사:</label>
+        <input type="checkbox" name="hobby" value="coding"> 코딩
+        <input type="checkbox" name="hobby" value="reading"> 독서
+        <input type="checkbox" name="hobby" value="sports"> 스포츠
+        <br><br>
+
+        <label for="country">국가:</label>
+        <select id="country" name="country">
+            <option value="kr">대한민국</option>
+            <option value="us">미국</option>
+            <option value="jp">일본</option>
+        </select>
+        <br><br>
+
+        <label for="message">메시지:</label>
+        <br>
+        <textarea id="message" name="message" rows="4" cols="40" placeholder="내용을 입력하세요"></textarea>
+        <br><br>
+
+        <input type="submit" value="제출">
+        <input type="reset" value="초기화">
+    </form>
+
+    <!-- 시맨틱 태그 -->
+    <h3>시맨틱 태그</h3>
+    <header>
+        <p>header: 페이지 상단 영역</p>
+    </header>
+    <nav>
+        <p>nav: 네비게이션 영역</p>
+    </nav>
+    <main>
+        <article>
+            <p>article: 독립적인 콘텐츠 영역</p>
+        </article>
+        <aside>
+            <p>aside: 사이드바 영역</p>
+        </aside>
+        <section>
+            <p>section: 섹션 구분 영역</p>
+        </section>
+    </main>
+    <footer>
+        <p>footer: 페이지 하단 영역</p>
+    </footer>
+
+    <!-- 미디어 -->
+    <h3>미디어</h3>
+    <figure>
+        <img src="https://via.placeholder.com/200x100" alt="figure 예시">
+        <figcaption>그림 설명: figcaption 태그</figcaption>
+    </figure>
+
+    <!-- 기타 -->
+    <h3>기타 태그</h3>
+    <p>줄바꿈 전<br>줄바꿈 후</p>
+    <p>
+        <span style="color: red;">span은 인라인 요소</span>입니다.
+    </p>
+    <div style="background-color: #eee; padding: 10px;">
+        div는 블록 요소입니다.
+    </div>
+
+    <details>
+        <summary>클릭해서 펼치기</summary>
+        <p>details/summary 태그로 숨겨진 내용을 보여줄 수 있습니다.</p>
+    </details>
+
+    <p>진행률: <progress value="70" max="100">70%</progress></p>
+    <p>범위: <meter value="0.6">60%</meter></p>
+
+    <abbr title="HyperText Markup Language">HTML</abbr>은 웹의 기본 언어입니다.
+
+    <hr>
+
+    <!-- ── JS 인터랙션 섹션 ── -->
+
+    <!-- 1. 숫자 카운터 -->
+    <div class="js-section reveal">
+        <h3>🔢 숫자 카운터</h3>
+        <p>버튼을 클릭해 숫자를 바꿔보세요.</p>
+        <div class="counter-wrap">
+            <button id="btn-minus">−</button>
+            <span id="counter-value">0</span>
+            <button id="btn-plus">+</button>
+        </div>
+    </div>
+
+    <!-- 2. 색상 팔레트 -->
+    <div class="js-section reveal">
+        <h3>🎨 색상 팔레트</h3>
+        <p>색상을 클릭하면 박스 색이 바뀝니다.</p>
+        <div class="palette">
+            <div class="color-dot" style="background:#3498db" data-color="#3498db" data-name="블루"></div>
+            <div class="color-dot" style="background:#2ecc71" data-color="#2ecc71" data-name="그린"></div>
+            <div class="color-dot" style="background:#e74c3c" data-color="#e74c3c" data-name="레드"></div>
+            <div class="color-dot" style="background:#f39c12" data-color="#f39c12" data-name="오렌지"></div>
+            <div class="color-dot" style="background:#9b59b6" data-color="#9b59b6" data-name="퍼플"></div>
+            <div class="color-dot" style="background:#1abc9c" data-color="#1abc9c" data-name="틸"></div>
+        </div>
+        <div id="color-box" style="background:#3498db">블루</div>
+    </div>
+
+    <!-- 3. 리스트 항목 추가 -->
+    <div class="js-section reveal">
+        <h3>📝 리스트 항목 추가</h3>
+        <div class="list-controls">
+            <input type="text" id="list-input" placeholder="항목 입력 후 추가 또는 Enter">
+            <button id="list-add-btn">추가</button>
+        </div>
+        <ul id="dynamic-list">
+            <li>기본 항목 1 <span style="cursor:pointer;color:#e74c3c;margin-left:8px" onclick="this.parentElement.remove()">✕</span></li>
+            <li>기본 항목 2 <span style="cursor:pointer;color:#e74c3c;margin-left:8px" onclick="this.parentElement.remove()">✕</span></li>
+        </ul>
+    </div>
+
+    <!-- 4. 애니메이션 프로그레스바 -->
+    <div class="js-section reveal">
+        <h3>📊 애니메이션 프로그레스바</h3>
+        <div class="progress-wrap">
+            <div id="animated-progress"></div>
+        </div>
+        <p id="progress-label">0%</p>
+        <button class="table-btn btn-add" id="progress-btn">▶ 시작</button>
+        <button class="table-btn btn-del" id="progress-reset">↺ 초기화</button>
+    </div>
+
+    <!-- 5. 테이블 행 추가/삭제 -->
+    <div class="js-section reveal">
+        <h3>🗂️ 테이블 동적 조작</h3>
+        <p>행을 클릭하면 선택되고, 삭제 버튼으로 제거할 수 있습니다.</p>
+        <table id="dynamic-table">
+            <thead>
+                <tr><th>이름</th><th>나이</th><th>직업</th></tr>
+            </thead>
+            <tbody id="table-body">
+                <tr><td>홍길동</td><td>25</td><td>개발자</td></tr>
+                <tr><td>김철수</td><td>30</td><td>디자이너</td></tr>
+            </tbody>
+        </table>
+        <button class="table-btn btn-add" id="btn-add-row">+ 행 추가</button>
+        <button class="table-btn btn-del" id="btn-del-row">− 선택 행 삭제</button>
+    </div>
+
+    <!-- 6. 글자 수 카운터 textarea -->
+    <div class="js-section reveal">
+        <h3>✏️ 글자 수 카운터</h3>
+        <textarea id="counted-textarea" rows="4" style="width:100%;max-width:400px;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:0.95rem;" placeholder="최대 100자 입력 가능합니다." maxlength="100"></textarea>
+        <div id="char-count">0 / 100</div>
+    </div>
+
+    <script src="script.js"></script>
+
+</body>
+</html>
