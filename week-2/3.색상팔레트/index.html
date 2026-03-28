@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>색상 팔레트</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F5F5F0; }
+    input[type="color"] {
+      -webkit-appearance: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+    }
+    input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    input[type="color"]::-webkit-color-swatch { border: 1px solid #D1D1C7; border-radius: 2px; }
+    input[type="color"]::-moz-color-swatch { border: 1px solid #D1D1C7; border-radius: 2px; }
+    .transition-color { transition: background-color 0.25s ease, color 0.2s ease; }
+    .copy-toast {
+      animation: toastFade 1.4s ease forwards;
+    }
+    @keyframes toastFade {
+      0% { opacity: 0; transform: translateY(4px); }
+      15% { opacity: 1; transform: translateY(0); }
+      75% { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-4px); }
+    }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: '#F5F5F0',
+            border: '#D1D1C7',
+            muted: '#8A8A7A',
+            ink: '#1A1A18',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+    // ========================================
+    // Color Conversion Utilities
+    // ========================================
+
+    function hexToRgb(hex) {
+      const h = hex.replace('#', '');
+      return {
+        r: parseInt(h.substring(0, 2), 16),
+        g: parseInt(h.substring(2, 4), 16),
+        b: parseInt(h.substring(4, 6), 16),
+      };
+    }
+
+    function rgbToHex(r, g, b) {
+      return '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase();
+    }
+
+    function rgbToHsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      if (max === min) { h = s = 0; }
+      else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+          case g: h = ((b - r) / d + 2) / 6; break;
+          case b: h = ((r - g) / d + 4) / 6; break;
+        }
+      }
+      return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+    }
+
+    function hslToRgb(h, s, l) {
+      h /= 360; s /= 100; l /= 100;
+      let r, g, b;
+      if (s === 0) { r = g = b = l; }
+      else {
+        const hue2rgb = (p, q, t) => {
+          if (t < 0) t += 1;
+          if (t > 1) t -= 1;
+          if (t < 1/6) return p + (q - p) * 6 * t;
+          if (t < 1/2) return q;
+          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+          return p;
+        };
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+      }
+      return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+    }
+
+    function rgbToHsv(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const d = max - min;
+      let h, s = max === 0 ? 0 : d / max, v = max;
+      if (max === min) { h = 0; }
+      else {
+        switch (max) {
+          case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+          case g: h = ((b - r) / d + 2) / 6; break;
+          case b: h = ((r - g) / d + 4) / 6; break;
+        }
+      }
+      return { h: Math.round(h * 360), s: Math.round(s * 100), v: Math.round(v * 100) };
+    }
+
+    function rgbToCmyk(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const k = 1 - Math.max(r, g, b);
+      if (k === 1) return { c: 0, m: 0, y: 0, k: 100 };
+      return {
+        c: Math.round(((1 - r - k) / (1 - k)) * 100),
+        m: Math.round(((1 - g - k) / (1 - k)) * 100),
+        y: Math.round(((1 - b - k) / (1 - k)) * 100),
+        k: Math.round(k * 100),
+      };
+    }
+
+    function relativeLuminance(r, g, b) {
+      const srgb = [r, g, b].map(v => {
+        v /= 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
+    }
+
+    function contrastRatio(l1, l2) {
+      const lighter = Math.max(l1, l2);
+      const darker = Math.min(l1, l2);
+      return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    function isValidHex(hex) {
+      return /^#?[0-9A-Fa-f]{6}$/.test(hex);
+    }
+
+    // ========================================
+    // Color Name Database (~150 common colors)
+    // ========================================
+
+    const COLOR_NAMES = [
+      ["#000000","Black"],["#080808","Nearly Black"],["#1C1C1C","Night"],["#2F4F4F","Dark Slate Gray"],["#333333","Dark Charcoal"],["#36454F","Charcoal"],["#3B3B3B","Onyx"],["#414A4C","Outer Space"],["#464646","Iron"],["#4A4A4A","Davy's Gray"],
+      ["#555555","Dim Gray"],["#696969","Gray"],["#708090","Slate Gray"],["#778899","Light Slate Gray"],["#808080","Medium Gray"],["#A9A9A9","Dark Gray"],["#B0B0B0","Silver Chalice"],["#C0C0C0","Silver"],["#D3D3D3","Light Gray"],["#DCDCDC","Gainsboro"],
+      ["#F5F5F5","White Smoke"],["#FFFAFA","Snow"],["#FFFFFF","White"],
+      ["#800000","Maroon"],["#8B0000","Dark Red"],["#A52A2A","Brown"],["#B22222","Firebrick"],["#CD5C5C","Indian Red"],["#DC143C","Crimson"],["#FF0000","Red"],["#FF4500","Orange Red"],
+      ["#FF6347","Tomato"],["#FF7F7F","Light Coral"],["#FA8072","Salmon"],["#E9967A","Dark Salmon"],["#FFA07A","Light Salmon"],["#FF6B6B","Bittersweet"],["#CC0000","Boston University Red"],
+      ["#FF4040","Coral Red"],["#FF8C69","Salmon Orange"],
+      ["#FF8C00","Dark Orange"],["#FF7F00","Safety Orange"],["#FFA500","Orange"],["#FFB347","Pastel Orange"],["#FFCC80","Peach Orange"],["#FF9933","Deep Saffron"],["#E67300","Burnt Orange"],
+      ["#FFD700","Gold"],["#FFC107","Amber"],["#FFFF00","Yellow"],["#FFFFE0","Light Yellow"],["#FFFACD","Lemon Chiffon"],["#FAFAD2","Light Goldenrod"],["#F0E68C","Khaki"],
+      ["#BDB76B","Dark Khaki"],["#DAA520","Goldenrod"],["#B8860B","Dark Goldenrod"],["#FFD300","Cyber Yellow"],["#FFEF00","Canary Yellow"],
+      ["#9ACD32","Yellow Green"],["#7CFC00","Lawn Green"],["#7FFF00","Chartreuse"],["#ADFF2F","Green Yellow"],["#00FF00","Lime"],["#32CD32","Lime Green"],
+      ["#90EE90","Light Green"],["#98FB98","Pale Green"],["#00FA9A","Medium Spring Green"],["#00FF7F","Spring Green"],["#3CB371","Medium Sea Green"],
+      ["#2E8B57","Sea Green"],["#228B22","Forest Green"],["#006400","Dark Green"],["#008000","Green"],["#556B2F","Dark Olive Green"],["#6B8E23","Olive Drab"],
+      ["#808000","Olive"],["#66CDAA","Medium Aquamarine"],["#8FBC8F","Dark Sea Green"],["#20B2AA","Light Sea Green"],["#008B8B","Dark Cyan"],
+      ["#008080","Teal"],["#00CED1","Dark Turquoise"],["#40E0D0","Turquoise"],["#48D1CC","Medium Turquoise"],["#7FFFD4","Aquamarine"],["#00FFFF","Cyan"],
+      ["#E0FFFF","Light Cyan"],["#AFEEEE","Pale Turquoise"],["#76D7C4","Medium Turquoise Light"],
+      ["#5F9EA0","Cadet Blue"],["#4682B4","Steel Blue"],["#B0C4DE","Light Steel Blue"],["#ADD8E6","Light Blue"],["#B0E0E6","Powder Blue"],
+      ["#87CEEB","Sky Blue"],["#87CEFA","Light Sky Blue"],["#00BFFF","Deep Sky Blue"],["#1E90FF","Dodger Blue"],["#6495ED","Cornflower Blue"],
+      ["#4169E1","Royal Blue"],["#0000FF","Blue"],["#0000CD","Medium Blue"],["#00008B","Dark Blue"],["#000080","Navy"],["#191970","Midnight Blue"],
+      ["#0047AB","Cobalt Blue"],["#4B0082","Indigo"],["#483D8B","Dark Slate Blue"],["#6A5ACD","Slate Blue"],["#7B68EE","Medium Slate Blue"],
+      ["#9370DB","Medium Purple"],["#8A2BE2","Blue Violet"],["#9400D3","Dark Violet"],["#9932CC","Dark Orchid"],["#BA55D3","Medium Orchid"],
+      ["#8B008B","Dark Magenta"],["#800080","Purple"],["#660066","Tyrian Purple"],
+      ["#DA70D6","Orchid"],["#EE82EE","Violet"],["#DDA0DD","Plum"],["#FF00FF","Magenta"],["#FF69B4","Hot Pink"],["#FFB6C1","Light Pink"],
+      ["#FFC0CB","Pink"],["#DB7093","Pale Violet Red"],["#C71585","Medium Violet Red"],["#FF1493","Deep Pink"],["#FF007F","Rose"],
+      ["#E6E6FA","Lavender"],["#D8BFD8","Thistle"],["#FFE4E1","Misty Rose"],["#FFF0F5","Lavender Blush"],
+      ["#FAF0E6","Linen"],["#FAEBD7","Antique White"],["#FFDEAD","Navajo White"],["#FFE4C4","Bisque"],["#FFDAB9","Peach Puff"],
+      ["#F5DEB3","Wheat"],["#DEB887","Burlywood"],["#D2B48C","Tan"],["#BC8F8F","Rosy Brown"],["#F4A460","Sandy Brown"],
+      ["#CD853F","Peru"],["#D2691E","Chocolate"],["#8B4513","Saddle Brown"],["#A0522D","Sienna"],["#A52A2A","Auburn"],
+      ["#F0FFF0","Honeydew"],["#F5FFFA","Mint Cream"],["#F0FFFF","Azure"],["#F0F8FF","Alice Blue"],["#FFF8DC","Cornsilk"],
+      ["#FFFFF0","Ivory"],["#FFFAF0","Floral White"],["#FDF5E6","Old Lace"],["#FFF5EE","Seashell"],
+      ["#BFFF00","Lime Green Bright"],["#39FF14","Neon Green"],["#FF073A","Neon Red"],["#FF6EC7","Neon Pink"],["#7DF9FF","Electric Blue"],
+    ];
+
+    function getClosestColorName(hex) {
+      const { r, g, b } = hexToRgb(hex);
+      let minDist = Infinity;
+      let name = 'Unknown';
+      for (const [cHex, cName] of COLOR_NAMES) {
+        const c = hexToRgb(cHex);
+        const dist = Math.sqrt((r - c.r) ** 2 + (g - c.g) ** 2 + (b - c.b) ** 2);
+        if (dist < minDist) {
+          minDist = dist;
+          name = cName;
+        }
+      }
+      return name;
+    }
+
+    // ========================================
+    // Design System Components
+    // ========================================
+
+    function CopyButton({ text }) {
+      const [copied, setCopied] = useState(false);
+      const handleCopy = () => {
+        navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        });
+      };
+      return (
+        <button
+          onClick={handleCopy}
+          className="relative ml-2 px-1.5 py-0.5 text-xs text-muted hover:text-ink border border-transparent hover:border-border rounded transition-all flex-shrink-0"
+          aria-label={`${text} 복사`}
+        >
+          {copied ? (
+            <span className="copy-toast text-ink">복사됨</span>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+            </svg>
+          )}
+        </button>
+      );
+    }
+
+    function Badge({ pass, label }) {
+      return (
+        <span className={`inline-block px-2 py-0.5 text-xs font-medium border rounded ${
+          pass
+            ? 'text-ink border-ink bg-transparent'
+            : 'text-muted border-border bg-transparent'
+        }`}>
+          {label} {pass ? 'Pass' : 'Fail'}
+        </span>
+      );
+    }
+
+    function ColorSwatch({ color, size = 'md', onClick, label, sublabel, active = false }) {
+      const sizes = { sm: 'w-8 h-8', md: 'w-12 h-12', lg: 'w-full h-32' };
+      const { r, g, b } = hexToRgb(color);
+      const lum = relativeLuminance(r, g, b);
+      const textColor = lum > 0.4 ? '#1A1A18' : '#F5F5F0';
+      return (
+        <button
+          onClick={onClick}
+          className={`${sizes[size]} transition-color rounded-sm flex flex-col items-center justify-center ${
+            active ? 'ring-2 ring-ink ring-offset-1 ring-offset-surface' : ''
+          } ${onClick ? 'cursor-pointer hover:scale-105 transition-transform' : 'cursor-default'}`}
+          style={{ backgroundColor: color, color: textColor }}
+          title={label || color}
+        >
+          {label && <span className="text-[10px] font-medium leading-tight">{label}</span>}
+          {sublabel && <span className="text-[9px] opacity-75 leading-tight">{sublabel}</span>}
+        </button>
+      );
+    }
+
+    function SectionTitle({ children }) {
+      return (
+        <h2 className="text-xs font-medium tracking-widest uppercase text-muted mb-3 select-none">{children}</h2>
+      );
+    }
+
+    function Panel({ children, className = '' }) {
+      return (
+        <div className={`bg-white border border-border p-5 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Color Picker Component
+    // ========================================
+
+    function ColorPicker({ color, onChange }) {
+      const [hexInput, setHexInput] = useState(color);
+      const [inputError, setInputError] = useState(false);
+
+      useEffect(() => {
+        setHexInput(color);
+        setInputError(false);
+      }, [color]);
+
+      const handleHexChange = (e) => {
+        let val = e.target.value;
+        if (!val.startsWith('#')) val = '#' + val;
+        setHexInput(val);
+        if (isValidHex(val)) {
+          setInputError(false);
+          onChange(val.toUpperCase().startsWith('#') ? val.toUpperCase() : '#' + val.toUpperCase());
+        } else if (val.length > 1) {
+          setInputError(true);
+        }
+      };
+
+      const handleHexBlur = () => {
+        if (!isValidHex(hexInput)) {
+          setHexInput(color);
+          setInputError(false);
+        }
+      };
+
+      return (
+        <div>
+          <SectionTitle>색상 선택</SectionTitle>
+          <div className="flex items-center gap-4 mb-4">
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => onChange(e.target.value.toUpperCase())}
+              className="w-12 h-12 rounded-sm cursor-pointer"
+              aria-label="색상 선택기"
+            />
+            <div className="flex-1">
+              <div className="flex items-center border border-border rounded-sm overflow-hidden">
+                <span className="px-2 py-1.5 bg-surface text-muted text-sm border-r border-border select-none">HEX</span>
+                <input
+                  type="text"
+                  value={hexInput}
+                  onChange={handleHexChange}
+                  onBlur={handleHexBlur}
+                  maxLength={7}
+                  className={`flex-1 px-2 py-1.5 text-sm font-mono bg-white outline-none ${
+                    inputError ? 'text-red-600' : 'text-ink'
+                  }`}
+                  aria-label="HEX 색상 코드 입력"
+                />
+              </div>
+            </div>
+          </div>
+          <div
+            className="w-full h-32 rounded-sm transition-color border border-border"
+            style={{ backgroundColor: color }}
+            role="img"
+            aria-label={`선택된 색상: ${color}`}
+          />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Color Info Panel Component
+    // ========================================
+
+    function ColorInfoPanel({ color }) {
+      const rgb = hexToRgb(color);
+      const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+      const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+      const cmyk = rgbToCmyk(rgb.r, rgb.g, rgb.b);
+      const lum = relativeLuminance(rgb.r, rgb.g, rgb.b);
+      const isDark = lum < 0.2;
+      const colorName = getClosestColorName(color);
+
+      const entries = [
+        { label: 'HEX', value: color },
+        { label: 'RGB', value: `${rgb.r}, ${rgb.g}, ${rgb.b}` },
+        { label: 'HSL', value: `${hsl.h}\u00B0, ${hsl.s}%, ${hsl.l}%` },
+        { label: 'HSV', value: `${hsv.h}\u00B0, ${hsv.s}%, ${hsv.v}%` },
+        { label: 'CMYK', value: `${cmyk.c}%, ${cmyk.m}%, ${cmyk.y}%, ${cmyk.k}%` },
+        { label: '이름', value: colorName },
+        { label: '휘도', value: lum.toFixed(4) },
+        { label: '분류', value: isDark ? 'Dark' : 'Light' },
+      ];
+
+      return (
+        <div>
+          <SectionTitle>색상 정보</SectionTitle>
+          <div className="space-y-0">
+            {entries.map(({ label, value }) => (
+              <div key={label} className="flex items-center justify-between py-1.5 border-b border-border last:border-b-0">
+                <span className="text-xs text-muted w-12 flex-shrink-0">{label}</span>
+                <span className="text-sm font-mono text-ink flex-1 text-right mr-1 truncate">{value}</span>
+                <CopyButton text={value} />
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Contrast Checker Component
+    // ========================================
+
+    function ContrastChecker({ color }) {
+      const rgb = hexToRgb(color);
+      const lum = relativeLuminance(rgb.r, rgb.g, rgb.b);
+      const whiteLum = 1.0;
+      const blackLum = 0.0;
+      const whiteContrast = contrastRatio(lum, whiteLum);
+      const blackContrast = contrastRatio(lum, blackLum);
+
+      const checks = [
+        {
+          label: '흰색 배경',
+          bg: '#FFFFFF',
+          fg: color,
+          ratio: whiteContrast,
+        },
+        {
+          label: '검정 배경',
+          bg: '#000000',
+          fg: color,
+          ratio: blackContrast,
+        },
+      ];
+
+      return (
+        <div>
+          <SectionTitle>명암비 검사</SectionTitle>
+          <div className="space-y-3">
+            {checks.map(({ label, bg, fg, ratio }) => (
+              <div key={label} className="flex items-center gap-3">
+                <div
+                  className="w-16 h-10 rounded-sm border border-border flex items-center justify-center text-xs font-medium flex-shrink-0"
+                  style={{ backgroundColor: bg, color: fg }}
+                >
+                  가나다
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-muted">{label}</span>
+                    <span className="text-xs font-mono text-ink">{ratio.toFixed(2)}:1</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Badge pass={ratio >= 4.5} label="AA" />
+                    <Badge pass={ratio >= 7} label="AAA" />
+                    <Badge pass={ratio >= 3} label="AA Large" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Tone-on-Tone Component
+    // ========================================
+
+    function ToneOnTone({ color, onSelect }) {
+      const rgb = hexToRgb(color);
+      const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+
+      const swatches = useMemo(() => {
+        const lightnesses = [95, 85, 70, 55, 40, 25, 12];
+        return lightnesses.map(l => {
+          const { r, g, b } = hslToRgb(hsl.h, Math.min(hsl.s, 90), l);
+          const hex = rgbToHex(r, g, b);
+          return { hex, lightness: l };
+        });
+      }, [hsl.h, hsl.s]);
+
+      return (
+        <div>
+          <SectionTitle>톤온톤 (Tone-on-Tone)</SectionTitle>
+          <p className="text-xs text-muted mb-3">같은 색상, 다른 밝기</p>
+          <div className="grid grid-cols-7 gap-1.5">
+            {swatches.map(({ hex, lightness }) => (
+              <div key={hex + lightness} className="flex flex-col items-center gap-1">
+                <ColorSwatch
+                  color={hex}
+                  size="md"
+                  onClick={() => onSelect(hex)}
+                  active={hex === color}
+                />
+                <span className="text-[9px] font-mono text-muted leading-none">{hex}</span>
+                <span className="text-[9px] text-muted leading-none">L{lightness}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Tone-in-Tone Component
+    // ========================================
+
+    function ToneInTone({ color, onSelect }) {
+      const rgb = hexToRgb(color);
+      const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+
+      const swatches = useMemo(() => {
+        const result = [];
+        for (let i = 0; i < 8; i++) {
+          const hue = (hsl.h + i * 45) % 360;
+          const { r, g, b } = hslToRgb(hue, hsl.s, hsl.l);
+          const hex = rgbToHex(r, g, b);
+          result.push({ hex, hue });
+        }
+        return result;
+      }, [hsl.h, hsl.s, hsl.l]);
+
+      return (
+        <div>
+          <SectionTitle>톤인톤 (Tone-in-Tone)</SectionTitle>
+          <p className="text-xs text-muted mb-3">같은 톤, 다른 색상</p>
+          <div className="grid grid-cols-8 gap-1.5">
+            {swatches.map(({ hex, hue }) => (
+              <div key={hex + hue} className="flex flex-col items-center gap-1">
+                <ColorSwatch
+                  color={hex}
+                  size="md"
+                  onClick={() => onSelect(hex)}
+                  active={hex === color}
+                />
+                <span className="text-[9px] font-mono text-muted leading-none">{hex}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Color History Component
+    // ========================================
+
+    function ColorHistory({ history, onSelect, currentColor }) {
+      if (history.length === 0) return null;
+      return (
+        <div>
+          <SectionTitle>최근 사용 색상</SectionTitle>
+          <div className="flex gap-2 flex-wrap">
+            {history.map((hex, i) => (
+              <div key={hex + i} className="flex flex-col items-center gap-1">
+                <ColorSwatch
+                  color={hex}
+                  size="sm"
+                  onClick={() => onSelect(hex)}
+                  active={hex === currentColor}
+                />
+                <span className="text-[8px] font-mono text-muted">{hex}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+
+    function App() {
+      const [color, setColor] = useState(() => {
+        const saved = localStorage.getItem('palette-current');
+        return saved && isValidHex(saved) ? saved : '#3A7CA5';
+      });
+
+      const [history, setHistory] = useState(() => {
+        try {
+          const saved = JSON.parse(localStorage.getItem('palette-history') || '[]');
+          return Array.isArray(saved) ? saved.slice(0, 12) : [];
+        } catch { return []; }
+      });
+
+      const handleColorChange = useCallback((newColor) => {
+        const normalized = newColor.toUpperCase();
+        if (!isValidHex(normalized)) return;
+        setColor(normalized);
+        setHistory(prev => {
+          const filtered = prev.filter(c => c !== normalized);
+          const updated = [normalized, ...filtered].slice(0, 12);
+          localStorage.setItem('palette-history', JSON.stringify(updated));
+          return updated;
+        });
+        localStorage.setItem('palette-current', normalized);
+      }, []);
+
+      return (
+        <div className="min-h-screen bg-surface">
+          {/* Header */}
+          <header className="border-b border-border bg-white">
+            <div className="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between">
+              <h1 className="text-lg font-light tracking-wide text-ink">
+                색상 팔레트
+              </h1>
+              <span className="text-xs text-muted tracking-wider">COLOR PALETTE</span>
+            </div>
+          </header>
+
+          {/* Main Content */}
+          <main className="max-w-6xl mx-auto px-5 py-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+              {/* Left Column */}
+              <div className="lg:col-span-4 space-y-5">
+                <Panel>
+                  <ColorPicker color={color} onChange={handleColorChange} />
+                </Panel>
+                <Panel>
+                  <ColorInfoPanel color={color} />
+                </Panel>
+                <Panel>
+                  <ContrastChecker color={color} />
+                </Panel>
+              </div>
+
+              {/* Right Column */}
+              <div className="lg:col-span-8 space-y-5">
+                <Panel>
+                  <ToneOnTone color={color} onSelect={handleColorChange} />
+                </Panel>
+                <Panel>
+                  <ToneInTone color={color} onSelect={handleColorChange} />
+                </Panel>
+              </div>
+            </div>
+
+            {/* Bottom: History */}
+            <div className="mt-5">
+              <Panel>
+                <ColorHistory history={history} onSelect={handleColorChange} currentColor={color} />
+              </Panel>
+            </div>
+          </main>
+
+          {/* Footer */}
+          <footer className="border-t border-border mt-8">
+            <div className="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between">
+              <span className="text-[11px] text-muted">Less, but better.</span>
+              <span className="text-[11px] text-muted">Dieter Rams</span>
+            </div>
+          </footer>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
