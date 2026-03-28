@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>나이 계산기</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #F4F3EF;
+      --surface: #FFFFFF;
+      --border: #C8C7C1;
+      --border-strong: #8A8980;
+      --text-primary: #1A1A18;
+      --text-secondary: #6B6A64;
+      --text-tertiary: #9A9990;
+      --accent: #CC2200;
+      --accent-dim: #F0EAE8;
+      --grid: 8px;
+    }
+
+    body {
+      font-family: 'IBM Plex Sans KR', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Layout */
+    #root { min-height: 100vh; }
+
+    .layout {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding-bottom: 24px;
+      border-bottom: 2px solid var(--text-primary);
+      margin-bottom: 40px;
+    }
+
+    .header-label {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .header-title {
+      font-size: 28px;
+      font-weight: 300;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+    }
+
+    .header-title span {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* Mode toggle */
+    .mode-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: 1px solid var(--border-strong);
+      padding: 6px 14px;
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .mode-btn:hover {
+      background: var(--text-primary);
+      color: var(--bg);
+      border-color: var(--text-primary);
+    }
+
+    .mode-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    /* Input block */
+    .input-block {
+      margin-bottom: 32px;
+    }
+
+    .field-label {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 0;
+    }
+
+    input[type="date"] {
+      flex: 1;
+      height: 48px;
+      padding: 0 16px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 15px;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-right: none;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.15s;
+      -webkit-appearance: none;
+    }
+
+    input[type="date"]:focus {
+      border-color: var(--accent);
+    }
+
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      opacity: 0.5;
+      cursor: pointer;
+    }
+
+    .copy-btn {
+      height: 48px;
+      padding: 0 24px;
+      background: var(--text-primary);
+      border: 1px solid var(--text-primary);
+      color: var(--bg);
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .copy-btn:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .error-msg {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+
+    /* Settings */
+    .settings-block {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 0;
+      margin-bottom: 40px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+    }
+
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 20px 8px 0;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .check-item input[type="checkbox"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      cursor: pointer;
+      flex-shrink: 0;
+      position: relative;
+      transition: background 0.1s, border-color 0.1s;
+    }
+
+    .check-item input[type="checkbox"]:checked {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .check-item input[type="checkbox"]:checked::after {
+      content: '';
+      position: absolute;
+      left: 4px;
+      top: 1px;
+      width: 5px;
+      height: 9px;
+      border: 1.5px solid white;
+      border-top: none;
+      border-left: none;
+      transform: rotate(45deg);
+    }
+
+    .check-label {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    /* Section */
+    .section {
+      margin-bottom: 40px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .section-num {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+
+    .section-title {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .section-line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* Instrument grid */
+    .instrument-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-top: 1px solid var(--border-strong);
+      border-left: 1px solid var(--border-strong);
+    }
+
+    .instrument-grid-2 {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .instrument-cell {
+      border-right: 1px solid var(--border-strong);
+      border-bottom: 1px solid var(--border-strong);
+      padding: 20px 24px;
+      background: var(--surface);
+    }
+
+    .instrument-cell.accent-cell {
+      background: var(--accent-dim);
+    }
+
+    .cell-value {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 36px;
+      font-weight: 400;
+      color: var(--text-primary);
+      line-height: 1;
+      margin-bottom: 10px;
+      letter-spacing: -0.02em;
+    }
+
+    .cell-value.large {
+      font-size: 48px;
+    }
+
+    .cell-value .unit {
+      font-size: 14px;
+      color: var(--text-secondary);
+      font-weight: 300;
+      margin-left: 2px;
+    }
+
+    .cell-label {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .cell-sublabel {
+      font-size: 10px;
+      color: var(--text-tertiary);
+      margin-top: 2px;
+    }
+
+    /* Birthday banner */
+    .birthday-banner {
+      border-left: 3px solid var(--accent);
+      padding: 14px 20px;
+      background: var(--accent-dim);
+      margin-bottom: 40px;
+    }
+
+    .birthday-banner-label {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 2px;
+    }
+
+    .birthday-banner-text {
+      font-size: 16px;
+      font-weight: 400;
+      color: var(--text-primary);
+    }
+
+    /* Text cell (for long values) */
+    .text-cell-value {
+      font-size: 20px;
+      font-weight: 400;
+      color: var(--text-primary);
+      line-height: 1.2;
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+
+    /* Empty state */
+    .empty-state {
+      padding: 64px 0;
+      text-align: center;
+    }
+
+    .empty-crosshair {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 20px;
+      position: relative;
+    }
+
+    .empty-crosshair::before, .empty-crosshair::after {
+      content: '';
+      position: absolute;
+      background: var(--border-strong);
+    }
+
+    .empty-crosshair::before {
+      width: 1px;
+      height: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .empty-crosshair::after {
+      height: 1px;
+      width: 100%;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .empty-circle {
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--border-strong);
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .empty-title {
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .empty-sub {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: 64px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-text {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+    }
+
+    .footer-accent {
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text-primary);
+      color: var(--bg);
+      padding: 10px 24px;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      z-index: 100;
+      animation: slideUp 0.2s ease-out;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* Dark mode */
+    .dark-mode {
+      --bg: #1A1A18;
+      --surface: #222220;
+      --border: #3A3A36;
+      --border-strong: #525250;
+      --text-primary: #E8E7E2;
+      --text-secondary: #8A8980;
+      --text-tertiary: #5A5A56;
+      --accent: #E03318;
+      --accent-dim: #2A1E1C;
+    }
+
+    /* Score bar */
+    .score-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+
+    .score-dot {
+      width: 10px;
+      height: 10px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    .score-dot.on {
+      background: var(--accent);
+    }
+
+    /* Fortune grid */
+    .fortune-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-top: 1px solid var(--border-strong);
+      border-left: 1px solid var(--border-strong);
+    }
+
+    .fortune-cell-full {
+      grid-column: 1 / -1;
+    }
+
+    .fortune-text {
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+    }
+
+    .fortune-sign {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      color: var(--text-tertiary);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 540px) {
+      .instrument-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .instrument-grid.force-3 {
+        grid-template-columns: repeat(1, 1fr);
+      }
+      .fortune-grid {
+        grid-template-columns: repeat(1, 1fr);
+      }
+      .fortune-cell-full {
+        grid-column: 1;
+      }
+      .cell-value.large {
+        font-size: 36px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo, useCallback } = React;
+
+    // ── Fortune engine ──────────────────────────────────────────
+    function simpleHash(str) {
+      let h = 5381;
+      for (let i = 0; i < str.length; i++) {
+        h = (((h << 5) + h) ^ str.charCodeAt(i)) >>> 0;
+      }
+      return h;
+    }
+
+    const FORTUNE = {
+      overall: [
+        "오늘은 새로운 시작에 좋은 날입니다. 계획했던 일을 실행에 옮겨 보세요.",
+        "주변의 도움을 자연스럽게 받게 되는 하루입니다. 협력이 빛을 발합니다.",
+        "예상치 못한 기회가 찾아올 수 있습니다. 열린 마음으로 받아들이세요.",
+        "내면의 목소리에 귀 기울이는 것이 중요합니다. 직관을 믿으세요.",
+        "오래된 문제가 해결의 실마리를 보입니다. 조금 더 인내하세요.",
+        "에너지가 넘치는 하루입니다. 중요한 결정을 내리기에 좋은 때입니다.",
+        "준비가 기회를 만나는 날입니다. 꼼꼼한 마무리에 집중하세요.",
+        "작은 성취를 축하하세요. 큰 목표로 나아가는 중요한 발걸음입니다.",
+        "쉬어가는 날로 삼으세요. 재충전이 내일의 동력이 됩니다.",
+        "솔직한 대화가 관계를 한층 깊게 만들어 줄 것입니다.",
+        "긍정적인 에너지가 주변 사람들에게도 영향을 미칩니다.",
+        "변화에 유연하게 대처하는 것이 오늘의 핵심입니다.",
+      ],
+      love: [
+        "따뜻한 말 한마디가 관계에 큰 변화를 가져옵니다.",
+        "새로운 만남의 가능성이 열려 있습니다. 일상 속 인연에 주목하세요.",
+        "상대의 입장에서 생각해 보는 하루가 되세요. 이해가 깊어집니다.",
+        "감정 표현을 솔직하게 하면 오해가 풀릴 것입니다.",
+        "오랫동안 연락하지 못했던 사람에게 먼저 연락해 보세요.",
+        "작은 배려가 큰 감동을 줄 수 있는 날입니다.",
+        "진심을 담은 행동이 상대방에게 잘 전달되는 날입니다.",
+        "설레는 감정이 찾아올 수 있습니다. 그 감정을 충분히 즐기세요.",
+        "신뢰를 쌓는 것이 모든 관계의 기본임을 느끼는 날입니다.",
+        "감사의 말이 관계를 더욱 따뜻하게 만들어 줄 것입니다.",
+        "충동적인 판단은 잠시 보류하세요. 감정이 예민해질 수 있습니다.",
+        "혼자만의 시간도 건강한 관계를 위한 필수 요소입니다.",
+      ],
+      career: [
+        "집중력이 높아지는 시간대를 활용해 중요한 업무를 처리하세요.",
+        "동료와의 협업에서 좋은 결과가 나올 것입니다.",
+        "새로운 아이디어가 떠오를 수 있습니다. 즉시 기록해 두세요.",
+        "서두르지 않고 차근차근 진행하는 것이 오늘의 전략입니다.",
+        "마감이 촉박한 일은 오늘 안에 마무리 짓는 것이 좋습니다.",
+        "평소와 다른 접근 방식을 시도해 보세요. 의외의 성과가 있을 것입니다.",
+        "미루어 왔던 일을 시작하기에 좋은 날입니다.",
+        "네트워크를 통해 유익한 정보를 얻을 수 있습니다.",
+        "체계적인 계획이 오늘의 성공을 좌우합니다.",
+        "작은 실수에 너무 연연하지 마세요. 큰 그림을 봐야 할 때입니다.",
+        "꼼꼼함이 빛을 발하는 하루입니다. 세부 사항에 집중하세요.",
+        "상사나 선배의 조언에 귀 기울이면 도움이 될 것입니다.",
+      ],
+      health: [
+        "규칙적인 식사와 충분한 수분 섭취가 중요합니다.",
+        "가벼운 스트레칭으로 몸의 긴장을 풀어 주세요.",
+        "수면이 부족하다면 오늘은 일찍 쉬는 것이 좋습니다.",
+        "소화 기관에 주의가 필요합니다. 자극적인 음식을 피하세요.",
+        "야외 활동이 기분 전환에 큰 도움이 될 것입니다.",
+        "스트레스 관리가 건강의 핵심입니다. 깊은 호흡을 자주 하세요.",
+        "오랫동안 앉아 있었다면 잠시 걷는 시간을 가져보세요.",
+        "몸에서 보내는 신호에 귀를 기울이세요. 무리하지 마세요.",
+        "긍정적인 마음가짐이 면역력을 높여 줍니다.",
+        "조용한 환경에서 잠시 명상하는 것이 도움이 됩니다.",
+        "균형 잡힌 식단이 오늘의 활력을 만들어 줍니다.",
+        "충분한 휴식이 최고의 보약임을 기억하세요.",
+      ],
+    };
+
+    function getDailyFortune(constellation) {
+      const dateStr = new Date().toISOString().split('T')[0];
+      const seed = simpleHash(constellation + dateStr);
+      const pick = (arr, off) => arr[(seed + off) % arr.length];
+      const score = off => ((seed + off) % 5) + 1;
+      return {
+        overall: { text: pick(FORTUNE.overall, 0),  score: score(0)  },
+        love:    { text: pick(FORTUNE.love,    7),  score: score(7)  },
+        career:  { text: pick(FORTUNE.career,  13), score: score(13) },
+        health:  { text: pick(FORTUNE.health,  19), score: score(19) },
+      };
+    }
+
+    function ScoreBar({ score }) {
+      return (
+        <div className="score-bar">
+          {[1,2,3,4,5].map(i => (
+            <div key={i} className={`score-dot${i <= score ? ' on' : ''}`} />
+          ))}
+        </div>
+      );
+    }
+    // ────────────────────────────────────────────────────────────
+
+    const ZODIAC_ANIMALS = [
+      '원숭이','닭','개','돼지','쥐','소',
+      '호랑이','토끼','용','뱀','말','양'
+    ];
+    const DAY_NAMES = ['일','월','화','수','목','금','토'];
+
+    function getZodiacSign(month, day) {
+      const signs = [
+        { name: '염소자리', start: [1,1], end: [1,19] },
+        { name: '물병자리', start: [1,20], end: [2,18] },
+        { name: '물고기자리', start: [2,19], end: [3,20] },
+        { name: '양자리', start: [3,21], end: [4,19] },
+        { name: '황소자리', start: [4,20], end: [5,20] },
+        { name: '쌍둥이자리', start: [5,21], end: [6,21] },
+        { name: '게자리', start: [6,22], end: [7,22] },
+        { name: '사자자리', start: [7,23], end: [8,22] },
+        { name: '처녀자리', start: [8,23], end: [9,22] },
+        { name: '천칭자리', start: [9,23], end: [10,22] },
+        { name: '전갈자리', start: [10,23], end: [11,21] },
+        { name: '사수자리', start: [11,22], end: [12,21] },
+        { name: '염소자리', start: [12,22], end: [12,31] },
+      ];
+      for (const s of signs) {
+        const after = month > s.start[0] || (month === s.start[0] && day >= s.start[1]);
+        const before = month < s.end[0] || (month === s.end[0] && day <= s.end[1]);
+        if (after && before) return s.name;
+      }
+      return signs[0].name;
+    }
+
+    function calculateAge(birthDate) {
+      const now = new Date();
+      const birth = new Date(birthDate);
+      if (isNaN(birth.getTime()) || birth > now) return null;
+
+      const bY = birth.getFullYear(), bM = birth.getMonth(), bD = birth.getDate();
+      const nY = now.getFullYear(), nM = now.getMonth(), nD = now.getDate();
+
+      let international = nY - bY;
+      if (nM < bM || (nM === bM && nD < bD)) international--;
+
+      let nextBirthday = new Date(nY, bM, bD);
+      if (nextBirthday <= now) nextBirthday = new Date(nY + 1, bM, bD);
+      const daysUntil = Math.ceil((nextBirthday - now) / 86400000);
+
+      const livedMs = now - birth;
+      const livedDays  = Math.floor(livedMs / 86400000);
+      const livedHours = Math.floor(livedMs / 3600000);
+      const livedMins  = Math.floor(livedMs / 60000);
+
+      return {
+        international,
+        korean: nY - bY + 1,
+        yearAge: nY - bY,
+        daysUntil,
+        birthDayOfWeek: DAY_NAMES[birth.getDay()],
+        livedDays, livedHours, livedMins,
+        zodiac: ZODIAC_ANIMALS[bY % 12],
+        constellation: getZodiacSign(bM + 1, bD),
+        isBirthdayToday: nM === bM && nD === bD,
+        birthStr: birth.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' }),
+      };
+    }
+
+    const fmt = n => n.toLocaleString('ko-KR');
+
+    function App() {
+      const [birthDate, setBirthDate] = useState('');
+      const [dark, setDark] = useState(false);
+      const [toast, setToast] = useState(false);
+      const [opts, setOpts] = useState({
+        age: true, birthday: true, lived: true, zodiac: true, horoscope: true,
+      });
+
+      const result = useMemo(() => birthDate ? calculateAge(birthDate) : null, [birthDate]);
+      const fortune = useMemo(() => result ? getDailyFortune(result.constellation) : null, [result]);
+      const toggle = key => setOpts(p => ({ ...p, [key]: !p[key] }));
+      const today = new Date().toISOString().split('T')[0];
+
+      const handleCopy = useCallback(() => {
+        if (!result) return;
+        const lines = [`나이 계산 결과 — ${result.birthStr}`,''];
+        if (opts.age) lines.push(`만나이: ${result.international}세`, `세는나이: ${result.korean}세`, `연나이: ${result.yearAge}세`, '');
+        if (opts.birthday) lines.push(`태어난 요일: ${result.birthDayOfWeek}요일`, `다음 생일까지: ${result.isBirthdayToday ? '오늘' : result.daysUntil + '일'}`, '');
+        if (opts.lived) lines.push(`살아온 날수: ${fmt(result.livedDays)}일`, `시간: ${fmt(result.livedHours)}`, `분: ${fmt(result.livedMins)}`, '');
+        if (opts.zodiac) lines.push(`띠: ${result.zodiac}띠`, `별자리: ${result.constellation}`, '');
+        if (opts.horoscope && fortune) {
+          lines.push(`── 오늘의 운세 (${result.constellation}) ──`);
+          lines.push(`총운 [${'■'.repeat(fortune.overall.score)}${'□'.repeat(5-fortune.overall.score)}] ${fortune.overall.text}`);
+          lines.push(`애정운 [${'■'.repeat(fortune.love.score)}${'□'.repeat(5-fortune.love.score)}] ${fortune.love.text}`);
+          lines.push(`직업운 [${'■'.repeat(fortune.career.score)}${'□'.repeat(5-fortune.career.score)}] ${fortune.career.text}`);
+          lines.push(`건강운 [${'■'.repeat(fortune.health.score)}${'□'.repeat(5-fortune.health.score)}] ${fortune.health.text}`);
+        }
+        navigator.clipboard.writeText(lines.join('\n')).then(() => {
+          setToast(true);
+          setTimeout(() => setToast(false), 2000);
+        });
+      }, [result, opts, fortune]);
+
+      return (
+        <div className={dark ? 'dark-mode' : ''}>
+          <div className="layout">
+
+            {/* Header */}
+            <header className="header">
+              <div>
+                <div className="header-label">Calculator / 계산기</div>
+                <h1 className="header-title">나이 <span>계산기</span></h1>
+              </div>
+              <button className="mode-btn" onClick={() => setDark(d => !d)}>
+                <span className="mode-indicator" />
+                {dark ? 'Light' : 'Dark'}
+              </button>
+            </header>
+
+            {/* Input */}
+            <div className="input-block">
+              <label className="field-label" htmlFor="birthdate">생년월일 입력</label>
+              <div className="input-row">
+                <input
+                  id="birthdate"
+                  type="date"
+                  value={birthDate}
+                  max={today}
+                  onChange={e => setBirthDate(e.target.value)}
+                />
+                {result && (
+                  <button className="copy-btn" onClick={handleCopy}>복사</button>
+                )}
+              </div>
+              {birthDate && !result && (
+                <div className="error-msg">유효하지 않은 날짜입니다</div>
+              )}
+            </div>
+
+            {/* Settings */}
+            {result && (
+              <div className="settings-block">
+                {[
+                  { key: 'age',     label: '나이' },
+                  { key: 'birthday',label: '생일' },
+                  { key: 'lived',   label: '살아온 기간' },
+                  { key: 'zodiac',  label: '띠 / 별자리' },
+                  { key: 'horoscope', label: '오늘의 운세' },
+                ].map(({ key, label }) => (
+                  <label key={key} className="check-item">
+                    <input
+                      type="checkbox"
+                      checked={opts[key]}
+                      onChange={() => toggle(key)}
+                    />
+                    <span className="check-label">{label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {/* Results */}
+            {result && (
+              <div>
+                {/* Birthday banner */}
+                {result.isBirthdayToday && (
+                  <div className="birthday-banner" style={{ marginBottom: 40 }}>
+                    <div className="birthday-banner-label">Today</div>
+                    <div className="birthday-banner-text">생일을 축하합니다</div>
+                  </div>
+                )}
+
+                {/* Age */}
+                {opts.age && (
+                  <div className="section">
+                    <div className="section-header">
+                      <span className="section-num">01</span>
+                      <span className="section-title">나이</span>
+                      <span className="section-line" />
+                    </div>
+                    <div className="instrument-grid">
+                      <div className="instrument-cell accent-cell">
+                        <div className="cell-value large">{result.international}<span className="unit">세</span></div>
+                        <div className="cell-label">만나이</div>
+                        <div className="cell-sublabel">International Age</div>
+                      </div>
+                      <div className="instrument-cell">
+                        <div className="cell-value">{result.korean}<span className="unit">세</span></div>
+                        <div className="cell-label">세는나이</div>
+                        <div className="cell-sublabel">Korean Age</div>
+                      </div>
+                      <div className="instrument-cell">
+                        <div className="cell-value">{result.yearAge}<span className="unit">세</span></div>
+                        <div className="cell-label">연나이</div>
+                        <div className="cell-sublabel">Year Age</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Birthday info */}
+                {opts.birthday && (
+                  <div className="section">
+                    <div className="section-header">
+                      <span className="section-num">02</span>
+                      <span className="section-title">생일 정보</span>
+                      <span className="section-line" />
+                    </div>
+                    <div className="instrument-grid instrument-grid-2">
+                      <div className="instrument-cell">
+                        <div className="text-cell-value">{result.birthDayOfWeek}요일</div>
+                        <div className="cell-label">태어난 요일</div>
+                        <div className="cell-sublabel">Day of Birth</div>
+                      </div>
+                      <div className="instrument-cell">
+                        <div className="cell-value">
+                          {result.isBirthdayToday ? '—' : result.daysUntil}
+                          {!result.isBirthdayToday && <span className="unit">일</span>}
+                        </div>
+                        <div className="cell-label">다음 생일까지</div>
+                        <div className="cell-sublabel">{result.isBirthdayToday ? 'Today' : 'Days Until Birthday'}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Lived */}
+                {opts.lived && (
+                  <div className="section">
+                    <div className="section-header">
+                      <span className="section-num">03</span>
+                      <span className="section-title">살아온 기간</span>
+                      <span className="section-line" />
+                    </div>
+                    <div className="instrument-grid">
+                      <div className="instrument-cell">
+                        <div className="cell-value" style={{ fontSize: 24 }}>{fmt(result.livedDays)}<span className="unit">일</span></div>
+                        <div className="cell-label">날수</div>
+                        <div className="cell-sublabel">Days</div>
+                      </div>
+                      <div className="instrument-cell">
+                        <div className="cell-value" style={{ fontSize: 24 }}>{fmt(result.livedHours)}<span className="unit">h</span></div>
+                        <div className="cell-label">시간</div>
+                        <div className="cell-sublabel">Hours</div>
+                      </div>
+                      <div className="instrument-cell">
+                        <div className="cell-value" style={{ fontSize: 24 }}>{fmt(result.livedMins)}<span className="unit">m</span></div>
+                        <div className="cell-label">분</div>
+                        <div className="cell-sublabel">Minutes</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Zodiac */}
+                {opts.zodiac && (
+                  <div className="section">
+                    <div className="section-header">
+                      <span className="section-num">04</span>
+                      <span className="section-title">띠 / 별자리</span>
+                      <span className="section-line" />
+                    </div>
+                    <div className="instrument-grid instrument-grid-2">
+                      <div className="instrument-cell">
+                        <div className="text-cell-value">{result.zodiac}띠</div>
+                        <div className="cell-label">십이지</div>
+                        <div className="cell-sublabel">Chinese Zodiac</div>
+                      </div>
+                      <div className="instrument-cell">
+                        <div className="text-cell-value">{result.constellation}</div>
+                        <div className="cell-label">별자리</div>
+                        <div className="cell-sublabel">Zodiac Sign</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Horoscope */}
+                {opts.horoscope && fortune && (
+                  <div className="section">
+                    <div className="section-header">
+                      <span className="section-num">05</span>
+                      <span className="section-title">오늘의 운세</span>
+                      <span className="section-line" />
+                    </div>
+                    <div className="fortune-grid">
+                      <div className="instrument-cell fortune-cell-full accent-cell">
+                        <div className="cell-label" style={{ marginBottom: 10 }}>총운 — Overall</div>
+                        <ScoreBar score={fortune.overall.score} />
+                        <div className="fortune-text">{fortune.overall.text}</div>
+                        <div className="fortune-sign">{result.constellation} / {new Date().toLocaleDateString('ko-KR')}</div>
+                      </div>
+                      <div className="instrument-cell">
+                        <div className="cell-label" style={{ marginBottom: 10 }}>애정운</div>
+                        <ScoreBar score={fortune.love.score} />
+                        <div className="fortune-text">{fortune.love.text}</div>
+                        <div className="fortune-sign">Love</div>
+                      </div>
+                      <div className="instrument-cell">
+                        <div className="cell-label" style={{ marginBottom: 10 }}>직업운</div>
+                        <ScoreBar score={fortune.career.score} />
+                        <div className="fortune-text">{fortune.career.text}</div>
+                        <div className="fortune-sign">Career</div>
+                      </div>
+                      <div className="instrument-cell">
+                        <div className="cell-label" style={{ marginBottom: 10 }}>건강운</div>
+                        <ScoreBar score={fortune.health.score} />
+                        <div className="fortune-text">{fortune.health.text}</div>
+                        <div className="fortune-sign">Health</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!birthDate && (
+              <div className="empty-state">
+                <div className="empty-crosshair">
+                  <div className="empty-circle" />
+                </div>
+                <div className="empty-title">생년월일을 입력하세요</div>
+                <div className="empty-sub">만나이, 세는나이, 띠, 별자리 등을 확인합니다</div>
+              </div>
+            )}
+
+            {/* Footer */}
+            <footer className="footer">
+              <span className="footer-text">기준일 — {new Date().toLocaleDateString('ko-KR')}</span>
+              <span className="footer-accent" />
+            </footer>
+          </div>
+
+          {toast && (
+            <div className="toast">클립보드에 복사됨</div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
