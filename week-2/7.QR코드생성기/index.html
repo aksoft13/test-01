@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR 코드 생성기</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    :root {
+      --bg: #F2F1EE;
+      --surface: #FAFAF8;
+      --border: #D4D3CE;
+      --border-strong: #A8A7A2;
+      --text: #1A1916;
+      --muted: #7A7974;
+      --subtle: #C0BFB9;
+      --accent: #FFCD00;
+      --stage: #0D0D0B;
+    }
+
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .mono {
+      font-family: 'DM Mono', monospace;
+    }
+
+    .label {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .field {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 8px 10px;
+      outline: none;
+      border-radius: 0;
+      resize: vertical;
+    }
+
+    .field:focus {
+      border-color: var(--text);
+    }
+
+    .field::placeholder {
+      color: var(--subtle);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: 1px solid transparent;
+      outline: none;
+      border-radius: 0;
+      padding: 8px 14px;
+      transition: opacity 0.15s;
+    }
+
+    .btn:hover {
+      opacity: 0.85;
+    }
+
+    .btn:active {
+      opacity: 0.7;
+    }
+
+    .btn-primary {
+      background: var(--text);
+      color: #FAFAF8;
+      border-color: var(--text);
+    }
+
+    .btn-accent {
+      background: var(--accent);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border-color: var(--border);
+    }
+
+    .toggle-group {
+      display: flex;
+      border: 1px solid var(--border);
+    }
+
+    .toggle-btn {
+      flex: 1;
+      padding: 7px 6px;
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+      border: none;
+      border-right: 1px solid var(--border);
+      outline: none;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .toggle-btn:last-child {
+      border-right: none;
+    }
+
+    .toggle-btn.active {
+      background: var(--text);
+      color: #FAFAF8;
+    }
+
+    .toggle-btn:hover:not(.active) {
+      background: var(--border);
+    }
+
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .section + .section {
+      border-top: none;
+    }
+
+    .section-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .section-title {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .section-body {
+      padding: 14px;
+    }
+
+    .color-input-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .color-swatch {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      border-radius: 0;
+      padding: 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .color-swatch input[type="color"] {
+      position: absolute;
+      top: -4px;
+      left: -4px;
+      width: 36px;
+      height: 36px;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .color-hex {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .palette-swatch {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      border-radius: 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .palette-swatch:hover {
+      border-color: var(--text);
+    }
+
+    .palette-swatch.selected {
+      border-color: var(--text);
+      border-width: 2px;
+    }
+
+    .palette-top {
+      width: 100%;
+      height: 50%;
+    }
+
+    .palette-bottom {
+      width: 100%;
+      height: 50%;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--text);
+      color: #FAFAF8;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 10px 20px;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    .toast.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (max-width: 720px) {
+      .app-grid {
+        grid-template-columns: 1fr !important;
+      }
+      .preview-stage {
+        min-height: 300px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks Destructuring
+    // ========================================
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ========================================
+    // Constants
+    // ========================================
+    const SIZES = [128, 256, 512];
+    const ERROR_LEVELS = ['L', 'M', 'Q', 'H'];
+    const COLOR_PRESETS = [
+      { fg: '#1A1916', bg: '#FFFFFF', name: 'Classic' },
+      { fg: '#1A1916', bg: '#FFCD00', name: 'Braun' },
+      { fg: '#1B2A4A', bg: '#FFFFFF', name: 'Navy' },
+      { fg: '#FFFFFF', bg: '#1A1916', name: 'Invert' },
+      { fg: '#2D5016', bg: '#FFFFFF', name: 'Forest' },
+      { fg: '#8B1A1A', bg: '#FFFFFF', name: 'Crimson' },
+    ];
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const [text, setText] = useState('');
+      const [size, setSize] = useState(256);
+      const [errorLevel, setErrorLevel] = useState('H');
+      const [fgColor, setFgColor] = useState('#1A1916');
+      const [bgColor, setBgColor] = useState('#FFFFFF');
+      const [toastVisible, setToastVisible] = useState(false);
+      const qrContainerRef = useRef(null);
+      const qrInstanceRef = useRef(null);
+      const toastTimerRef = useRef(null);
+
+      // Generate QR code
+      useEffect(() => {
+        const container = qrContainerRef.current;
+        if (!container) return;
+
+        // Clear previous
+        container.innerHTML = '';
+        qrInstanceRef.current = null;
+
+        if (!text.trim()) return;
+
+        try {
+          const levelMap = {
+            L: QRCode.CorrectLevel.L,
+            M: QRCode.CorrectLevel.M,
+            Q: QRCode.CorrectLevel.Q,
+            H: QRCode.CorrectLevel.H,
+          };
+
+          qrInstanceRef.current = new QRCode(container, {
+            text: text,
+            width: size,
+            height: size,
+            colorDark: fgColor,
+            colorLight: bgColor,
+            correctLevel: levelMap[errorLevel],
+          });
+        } catch (e) {
+          container.innerHTML = '';
+        }
+      }, [text, size, errorLevel, fgColor, bgColor]);
+
+      const getCanvas = useCallback(() => {
+        const container = qrContainerRef.current;
+        if (!container) return null;
+        return container.querySelector('canvas');
+      }, []);
+
+      const handleDownload = useCallback(() => {
+        const canvas = getCanvas();
+        if (!canvas) return;
+        const url = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'qrcode.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, [getCanvas]);
+
+      const handleCopy = useCallback(async () => {
+        const canvas = getCanvas();
+        if (!canvas) return;
+        try {
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+          setToastVisible(true);
+          if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+          toastTimerRef.current = setTimeout(() => setToastVisible(false), 1500);
+        } catch (e) {
+          console.error('Clipboard copy failed:', e);
+        }
+      }, [getCanvas]);
+
+      const applyPreset = useCallback((preset) => {
+        setFgColor(preset.fg);
+        setBgColor(preset.bg);
+      }, []);
+
+      const hasQR = text.trim().length > 0;
+
+      return (
+        <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+          {/* Header */}
+          <header style={{
+            borderBottom: '1px solid var(--border)',
+            background: 'var(--surface)',
+            padding: '16px 24px',
+          }}>
+            <div style={{ maxWidth: 960, margin: '0 auto' }}>
+              <h1 style={{
+                fontSize: 15,
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                color: 'var(--text)',
+                margin: 0,
+              }}>
+                QR 코드 생성기
+              </h1>
+              <span style={{
+                fontSize: 10,
+                fontWeight: 500,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: 'var(--muted)',
+              }}>
+                QR Code Generator
+              </span>
+            </div>
+          </header>
+
+          {/* Main Content */}
+          <main style={{ maxWidth: 960, margin: '0 auto', padding: '20px 24px' }}>
+            <div
+              className="app-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '320px 1fr',
+                gap: 20,
+                alignItems: 'start',
+              }}
+            >
+              {/* Controls Panel */}
+              <div>
+                {/* Input Section */}
+                <div className="section">
+                  <div className="section-header">
+                    <span className="section-title">URL 또는 텍스트</span>
+                  </div>
+                  <div className="section-body">
+                    <textarea
+                      className="field"
+                      rows={3}
+                      value={text}
+                      onChange={e => setText(e.target.value)}
+                      placeholder="https://example.com 또는 원하는 텍스트"
+                      spellCheck={false}
+                    />
+                  </div>
+                </div>
+
+                {/* Size Section */}
+                <div className="section">
+                  <div className="section-header">
+                    <span className="section-title">크기</span>
+                    <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      {size}px
+                    </span>
+                  </div>
+                  <div className="section-body">
+                    <div className="toggle-group">
+                      {SIZES.map(s => (
+                        <button
+                          key={s}
+                          className={`toggle-btn mono${size === s ? ' active' : ''}`}
+                          onClick={() => setSize(s)}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Error Correction Section */}
+                <div className="section">
+                  <div className="section-header">
+                    <span className="section-title">오류 정정 수준</span>
+                    <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      {errorLevel}
+                    </span>
+                  </div>
+                  <div className="section-body">
+                    <div className="toggle-group">
+                      {ERROR_LEVELS.map(lvl => (
+                        <button
+                          key={lvl}
+                          className={`toggle-btn mono${errorLevel === lvl ? ' active' : ''}`}
+                          onClick={() => setErrorLevel(lvl)}
+                        >
+                          {lvl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Colors Section */}
+                <div className="section">
+                  <div className="section-header">
+                    <span className="section-title">색상</span>
+                  </div>
+                  <div className="section-body">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {/* Foreground */}
+                      <div>
+                        <label className="label">전경색 (모듈)</label>
+                        <div className="color-input-wrapper">
+                          <div className="color-swatch">
+                            <input
+                              type="color"
+                              value={fgColor}
+                              onChange={e => setFgColor(e.target.value)}
+                            />
+                          </div>
+                          <span className="color-hex">{fgColor.toUpperCase()}</span>
+                        </div>
+                      </div>
+
+                      {/* Background */}
+                      <div>
+                        <label className="label">배경색</label>
+                        <div className="color-input-wrapper">
+                          <div className="color-swatch">
+                            <input
+                              type="color"
+                              value={bgColor}
+                              onChange={e => setBgColor(e.target.value)}
+                            />
+                          </div>
+                          <span className="color-hex">{bgColor.toUpperCase()}</span>
+                        </div>
+                      </div>
+
+                      {/* Presets */}
+                      <div>
+                        <label className="label">프리셋</label>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {COLOR_PRESETS.map((preset, i) => {
+                            const isSelected = fgColor === preset.fg && bgColor === preset.bg;
+                            return (
+                              <div
+                                key={i}
+                                className={`palette-swatch${isSelected ? ' selected' : ''}`}
+                                onClick={() => applyPreset(preset)}
+                                title={preset.name}
+                              >
+                                <div className="palette-top" style={{ background: preset.fg }} />
+                                <div className="palette-bottom" style={{ background: preset.bg }} />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions Section */}
+                <div className="section">
+                  <div className="section-body" style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="btn btn-primary"
+                      style={{ flex: 1 }}
+                      onClick={handleDownload}
+                      disabled={!hasQR}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                      PNG 저장
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ flex: 1 }}
+                      onClick={handleCopy}
+                      disabled={!hasQR}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+                        <rect x="9" y="9" width="13" height="13" rx="0"/>
+                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                      </svg>
+                      클립보드 복사
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Preview Stage */}
+              <div
+                className="preview-stage"
+                style={{
+                  background: 'var(--stage)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 460,
+                  position: 'relative',
+                }}
+              >
+                {/* QR Container */}
+                <div
+                  ref={qrContainerRef}
+                  style={{
+                    display: hasQR ? 'block' : 'none',
+                    lineHeight: 0,
+                  }}
+                />
+
+                {/* Empty State */}
+                {!hasQR && (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}>
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3A3A38" strokeWidth="1.5" strokeLinecap="square">
+                      <rect x="2" y="2" width="8" height="8" rx="0"/>
+                      <rect x="14" y="2" width="8" height="8" rx="0"/>
+                      <rect x="2" y="14" width="8" height="8" rx="0"/>
+                      <rect x="14" y="14" width="4" height="4" rx="0"/>
+                      <line x1="22" y1="14" x2="22" y2="22"/>
+                      <line x1="14" y1="22" x2="22" y2="22"/>
+                    </svg>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 500,
+                      letterSpacing: '0.06em',
+                      color: '#5A5A58',
+                    }}>
+                      텍스트를 입력하면 QR 코드가 생성됩니다
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </main>
+
+          {/* Toast */}
+          <div className={`toast${toastVisible ? ' visible' : ''}`}>
+            복사됨!
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

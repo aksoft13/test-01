@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>코디 컬러</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #111; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: white; }
+    button { font-family: inherit; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useCallback } = React;
+
+// ── 색상 데이터 ────────────────────────────────────────────────
+const COLORS = [
+  { id: 'white',    name: '화이트',      hex: '#F4F4F2', tone: 'light', family: 'neutral' },
+  { id: 'offwhite', name: '오프화이트',  hex: '#EDE8DC', tone: 'light', family: 'neutral' },
+  { id: 'ivory',    name: '아이보리',    hex: '#F2EDD7', tone: 'light', family: 'neutral' },
+  { id: 'ltgray',   name: '라이트그레이',hex: '#C8C8C8', tone: 'light', family: 'neutral' },
+  { id: 'midgray',  name: '미드그레이',  hex: '#8A8A8A', tone: 'mid',   family: 'neutral' },
+  { id: 'charcoal', name: '차콜',        hex: '#3C3C3C', tone: 'dark',  family: 'neutral' },
+  { id: 'black',    name: '블랙',        hex: '#1A1A1A', tone: 'dark',  family: 'neutral' },
+  { id: 'skyblue',  name: '스카이블루',  hex: '#89C4E1', tone: 'light', family: 'blue'    },
+  { id: 'denim',    name: '데님블루',    hex: '#5B7FA6', tone: 'mid',   family: 'blue'    },
+  { id: 'indigo',   name: '인디고',      hex: '#364F8E', tone: 'dark',  family: 'blue'    },
+  { id: 'navy',     name: '네이비',      hex: '#1B2A4A', tone: 'dark',  family: 'blue'    },
+  { id: 'beige',    name: '베이지',      hex: '#D4C5A9', tone: 'light', family: 'earth'   },
+  { id: 'camel',    name: '카멜',        hex: '#C4945A', tone: 'mid',   family: 'earth'   },
+  { id: 'tan',      name: '탄',          hex: '#B8896A', tone: 'mid',   family: 'earth'   },
+  { id: 'brown',    name: '브라운',      hex: '#7A4828', tone: 'dark',  family: 'earth'   },
+  { id: 'dkbrown',  name: '다크브라운',  hex: '#3D1F0F', tone: 'dark',  family: 'earth'   },
+  { id: 'ltkhaki',  name: '라이트카키',  hex: '#C8C49A', tone: 'light', family: 'khaki'   },
+  { id: 'khaki',    name: '카키',        hex: '#9B9B6F', tone: 'mid',   family: 'khaki'   },
+  { id: 'olive',    name: '올리브',      hex: '#6B6E3A', tone: 'dark',  family: 'khaki'   },
+  { id: 'sage',     name: '세이지',      hex: '#9CAE8E', tone: 'mid',   family: 'green'   },
+  { id: 'fgreen',   name: '포레스트그린',hex: '#2C5530', tone: 'dark',  family: 'green'   },
+  { id: 'burgundy', name: '버건디',      hex: '#6B2535', tone: 'dark',  family: 'red'     },
+  { id: 'wine',     name: '와인',        hex: '#4A1525', tone: 'dark',  family: 'red'     },
+  { id: 'mustard',  name: '머스타드',    hex: '#C4962A', tone: 'mid',   family: 'yellow'  },
+];
+
+const byId = id => COLORS.find(c => c.id === id);
+
+// ── 큐레이션 조합 (중복 색상 없음) ────────────────────────────
+const CURATED = [
+  { name: '클래식 아메카지',  style: '아메카지', top: 'white',    bottom: 'indigo',   outer: 'camel',    shoes: 'brown'    },
+  { name: '어스톤 올인원',    style: '어스톤',   top: 'offwhite', bottom: 'khaki',    outer: 'brown',    shoes: 'dkbrown'  },
+  { name: '모노크롬 댄디',    style: '댄디',     top: 'ltgray',   bottom: 'charcoal', outer: 'midgray',  shoes: 'black'    },
+  { name: '네이비 베이직',    style: '댄디',     top: 'white',    bottom: 'navy',     outer: 'charcoal', shoes: 'brown'    },
+  { name: '올리브 밀리터리',  style: '캐주얼',   top: 'offwhite', bottom: 'khaki',    outer: 'olive',    shoes: 'dkbrown'  },
+  { name: '인디고 캐주얼',    style: '캐주얼',   top: 'beige',    bottom: 'indigo',   outer: 'charcoal', shoes: 'black'    },
+  { name: '차콜 그라데이션',  style: '댄디',     top: 'ltgray',   bottom: 'charcoal', outer: 'midgray',  shoes: 'black'    },
+  { name: '카멜 웜톤',        style: '어스톤',   top: 'ivory',    bottom: 'tan',      outer: 'camel',    shoes: 'dkbrown'  },
+  { name: '데님 아메리칸',    style: '아메카지', top: 'white',    bottom: 'denim',    outer: 'navy',     shoes: 'brown'    },
+  { name: '버건디 포인트',    style: '댄디',     top: 'offwhite', bottom: 'charcoal', outer: 'burgundy', shoes: 'dkbrown'  },
+  { name: '세이지 내추럴',    style: '캐주얼',   top: 'ivory',    bottom: 'khaki',    outer: 'sage',     shoes: 'tan'      },
+  { name: '와인 다크',        style: '댄디',     top: 'charcoal', bottom: 'black',    outer: 'wine',     shoes: 'dkbrown'  },
+  { name: '머스타드 빈티지',  style: '아메카지', top: 'white',    bottom: 'olive',    outer: 'mustard',  shoes: 'brown'    },
+  { name: '포레스트 아웃도어',style: '캐주얼',   top: 'offwhite', bottom: 'khaki',    outer: 'fgreen',   shoes: 'dkbrown'  },
+  { name: '크림 그레이',      style: '댄디',     top: 'ivory',    bottom: 'ltgray',   outer: 'midgray',  shoes: 'charcoal' },
+  { name: '블랙 올아웃',      style: '댄디',     top: 'ltgray',   bottom: 'black',    outer: 'charcoal', shoes: 'black'    },
+  { name: '스카이 프레시',    style: '캐주얼',   top: 'skyblue',  bottom: 'ltgray',   outer: 'offwhite', shoes: 'white'    },
+  { name: '탄 밀리터리',      style: '아메카지', top: 'ltkhaki',  bottom: 'tan',      outer: 'olive',    shoes: 'brown'    },
+  { name: '인디고 라이트',    style: '아메카지', top: 'white',    bottom: 'indigo',   outer: 'ltgray',   shoes: 'white'    },
+  { name: '차콜 카멜',        style: '댄디',     top: 'offwhite', bottom: 'charcoal', outer: 'camel',    shoes: 'brown'    },
+];
+
+const PARTS = ['top', 'bottom', 'outer', 'shoes'];
+const PART_META = { top: '상의', bottom: '하의', outer: '외투', shoes: '신발' };
+
+const TONE_IDX = { light: 0, mid: 1, dark: 2 };
+const TONES = ['light', 'mid', 'dark'];
+const PAIR_FAMILIES = {
+  neutral: ['blue', 'earth', 'khaki', 'neutral'],
+  blue:    ['neutral', 'earth', 'blue'],
+  earth:   ['neutral', 'earth', 'khaki'],
+  khaki:   ['earth', 'neutral', 'khaki'],
+  green:   ['neutral', 'earth', 'khaki'],
+  red:     ['neutral', 'earth', 'blue'],
+  yellow:  ['neutral', 'khaki', 'earth'],
+};
+
+// ── 색상 유틸 ─────────────────────────────────────────────────
+function hexToRgb(hex) {
+  return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+}
+function shade(hex, d) {
+  if (!hex || !hex.startsWith('#')) return hex || 'transparent';
+  const [r,g,b] = hexToRgb(hex);
+  const c = v => Math.min(255, Math.max(0, v + d));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
+function colorDist(h1, h2) {
+  const [r1,g1,b1] = hexToRgb(h1), [r2,g2,b2] = hexToRgb(h2);
+  return Math.sqrt((r1-r2)**2+(g1-g2)**2+(b1-b2)**2);
+}
+function closestColor(hex) {
+  return COLORS.reduce((best,c) => { const d=colorDist(hex,c.hex); return d<best.d?{c,d}:best; }, {c:COLORS[0],d:Infinity}).c;
+}
+
+// ── 추천 로직 ─────────────────────────────────────────────────
+function toneInToneRec(fixedParts) {
+  const fixedEntries = PARTS.filter(p=>fixedParts[p]).map(p=>[p,fixedParts[p]]);
+  if (!fixedEntries.length) return [];
+  const baseTone = byId(fixedEntries[0][1]).tone;
+  const fixedIds = new Set(fixedEntries.map(([,id])=>id));
+  const fixedFamilies = new Set(fixedEntries.map(([,id])=>byId(id).family));
+  const unfixed = PARTS.filter(p=>!fixedParts[p]);
+  const pool = COLORS.filter(c=>c.tone===baseTone&&!fixedIds.has(c.id))
+    .sort((a,b)=>(fixedFamilies.has(a.family)?1:0)-(fixedFamilies.has(b.family)?1:0));
+  const results=[], seen=new Set();
+  for (let v=0; v<pool.length&&results.length<3; v++) {
+    const outfit={...fixedParts};
+    const usedIds=new Set(fixedIds), usedFam=new Set(fixedFamilies);
+    let valid=true;
+    for (const part of unfixed) {
+      let pick=null;
+      for (let i=v; i<pool.length+v; i++) {
+        const c=pool[i%pool.length];
+        if (!usedIds.has(c.id)&&!usedFam.has(c.family)) { pick=c; break; }
+      }
+      if (!pick) for (const c of pool) { if (!usedIds.has(c.id)) { pick=c; break; } }
+      if (!pick) { valid=false; break; }
+      outfit[part]=pick.id; usedIds.add(pick.id); usedFam.add(pick.family);
+    }
+    const key=PARTS.map(p=>outfit[p]).join(',');
+    if (valid&&!seen.has(key)) { results.push(outfit); seen.add(key); }
+  }
+  return results;
+}
+
+function toneOnToneRec(fixedParts) {
+  const fixedEntries = PARTS.filter(p=>fixedParts[p]).map(p=>[p,fixedParts[p]]);
+  if (!fixedEntries.length) return [];
+  const baseColor = byId(fixedEntries[0][1]);
+  const pairFams = PAIR_FAMILIES[baseColor.family]||['neutral'];
+  const toneIdx = TONE_IDX[baseColor.tone];
+  const unfixed = PARTS.filter(p=>!fixedParts[p]);
+  return Array.from({length:3},(_,v)=>{
+    const outfit={...fixedParts};
+    const usedIds=new Set(PARTS.filter(p=>fixedParts[p]).map(p=>fixedParts[p]));
+    unfixed.forEach((part,i)=>{
+      const targetTone=TONES[(toneIdx+i+1)%3];
+      const fam=pairFams[(v+i)%pairFams.length];
+      const pick=COLORS.find(c=>c.family===fam&&c.tone===targetTone&&!usedIds.has(c.id))
+        ||COLORS.find(c=>c.tone===targetTone&&!usedIds.has(c.id))
+        ||COLORS.find(c=>!usedIds.has(c.id));
+      if (pick) { outfit[part]=pick.id; usedIds.add(pick.id); }
+    });
+    return outfit;
+  });
+}
+
+function pinterestRec(fixedParts) {
+  const fixedEntries = PARTS.filter(p=>fixedParts[p]).map(p=>[p,fixedParts[p]]);
+  if (!fixedEntries.length) return [];
+  return CURATED
+    .map(combo=>{
+      let score=0;
+      for (const [part,colorId] of fixedEntries) {
+        if (combo[part]===colorId) score+=10;
+        else if (byId(combo[part])?.family===byId(colorId)?.family) score+=4;
+        else if (byId(combo[part])?.tone===byId(colorId)?.tone) score+=2;
+      }
+      return {combo,score};
+    })
+    .filter(s=>{
+      if (!s.score) return false;
+      const vals=PARTS.map(p=>s.combo[p]);
+      return new Set(vals).size===vals.length;
+    })
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,3)
+    .map(({combo})=>({
+      outfit:{top:combo.top,bottom:combo.bottom,outer:combo.outer,shoes:combo.shoes},
+      name:combo.name, style:combo.style,
+    }));
+}
+
+// ── 4가지 스타일 SVG 캐릭터 ──────────────────────────────────
+// viewBox="0 0 60 158" 기준, 각 스타일별 외투 형태가 다름
+// 스타일: coat(롱코트) | vest(니트조끼) | cpo(CPO재킷) | rider(라이더)
+
+const STYLES = [
+  { id: 'coat',  label: '롱코트' },
+  { id: 'vest',  label: '니트조끼' },
+  { id: 'cpo',   label: 'CPO재킷' },
+  { id: 'rider', label: '라이더' },
+];
+
+function Head({ glasses = true }) {
+  return (
+    <>
+      {/* 헤어 */}
+      <ellipse cx="30" cy="11" rx="12" ry="11" fill="#2d1f3d"/>
+      <path d="M18,10 Q17,3 25,2 Q33,1 38,6 Q43,10 41,13 L37,11 Q32,4 24,5 Z" fill="#2d1f3d"/>
+      {/* 얼굴 */}
+      <ellipse cx="30" cy="18" rx="9" ry="10" fill="#e4c09c"/>
+      {/* 안경 */}
+      {glasses && <>
+        <rect x="21" y="15" width="7" height="5" rx="2" fill="none" stroke="#555" strokeWidth="0.8"/>
+        <rect x="30" y="15" width="7" height="5" rx="2" fill="none" stroke="#555" strokeWidth="0.8"/>
+        <line x1="28" y1="17" x2="30" y2="17" stroke="#555" strokeWidth="0.7"/>
+      </>}
+      {/* 목 */}
+      <rect x="27" y="27" width="6" height="7" rx="1.5" fill="#e0bc96"/>
+    </>
+  );
+}
+
+// 미니 스와치 색상 (색 안 선택 시)
+const EMPTY = '#333';
+
+function StyleCoat({ oc, tc, bc, sc }) {
+  return (
+    <svg viewBox="0 0 60 158" style={{ display:'block', width:'100%' }}>
+      {/* 신발 */}
+      <path d="M13,132 Q11,142 18,144 L28,144 Q31,144 31,140 L31,132 Z" fill={sc||EMPTY}/>
+      <path d="M29,132 L29,140 Q29,144 32,144 L42,144 Q49,142 47,132 Z" fill={sc||EMPTY}/>
+      <path d="M13,139 Q11,143 18,144 L28,144 Q31,144 31,142" fill={shade(sc||EMPTY,-35)} opacity="0.5"/>
+      <path d="M29,142 Q29,144 32,144 L42,144 Q49,142 47,139" fill={shade(sc||EMPTY,-35)} opacity="0.5"/>
+      {/* 하의 (코트 아래 조금만 보임) */}
+      <rect x="19" y="122" width="8" height="11" rx="1" fill={bc||EMPTY}/>
+      <rect x="33" y="122" width="8" height="11" rx="1" fill={bc||EMPTY}/>
+      {/* 상의 (칼라 부분만) */}
+      <rect x="24" y="34" width="12" height="14" fill={tc||EMPTY}/>
+      {/* 롱코트 (무릎 아래) */}
+      <path d="M24,33 L7,40 L5,126 L27,126 L24,33 Z" fill={oc||EMPTY}/>
+      <path d="M36,33 L53,40 L55,126 L33,126 L36,33 Z" fill={oc||EMPTY}/>
+      {/* 코트 그림자 */}
+      <path d="M24,33 L22,126 L27,126 Z" fill={shade(oc||EMPTY,-25)} opacity="0.25"/>
+      <path d="M36,33 L38,126 L33,126 Z" fill={shade(oc||EMPTY,-25)} opacity="0.25"/>
+      {/* V칼라 */}
+      <path d="M26,36 L30,45 L34,36" fill="none" stroke={shade(oc||EMPTY,-45)} strokeWidth="1.2" opacity="0.7"/>
+      {/* 코트 밑단선 */}
+      <line x1="5" y1="126" x2="55" y2="126" stroke={shade(oc||EMPTY,-40)} strokeWidth="0.7" opacity="0.4"/>
+      <Head/>
+    </svg>
+  );
+}
+
+function StyleVest({ oc, tc, bc, sc }) {
+  return (
+    <svg viewBox="0 0 60 158" style={{ display:'block', width:'100%' }}>
+      {/* 신발 */}
+      <path d="M13,130 Q11,140 18,142 L28,142 Q31,142 31,138 L31,130 Z" fill={sc||EMPTY}/>
+      <path d="M29,130 L29,138 Q29,142 32,142 L42,142 Q49,140 47,130 Z" fill={sc||EMPTY}/>
+      <path d="M13,137 Q11,141 18,142 L28,142 Q31,142 31,140" fill={shade(sc||EMPTY,-35)} opacity="0.5"/>
+      <path d="M29,140 Q29,142 32,142 L42,142 Q49,140 47,137" fill={shade(sc||EMPTY,-35)} opacity="0.5"/>
+      {/* 하의 */}
+      <path d="M24,92 L22,92 L18,130 L28,130 L26,92 Z" fill={bc||EMPTY}/>
+      <path d="M36,92 L38,92 L42,130 L32,130 L34,92 Z" fill={bc||EMPTY}/>
+      <line x1="26" y1="100" x2="24" y2="126" stroke={shade(bc||EMPTY,-18)} strokeWidth="0.9" opacity="0.3"/>
+      <line x1="34" y1="100" x2="36" y2="126" stroke={shade(bc||EMPTY,-18)} strokeWidth="0.9" opacity="0.3"/>
+      {/* 상의 셔츠 (소매 포함) */}
+      <path d="M24,33 L6,40 L5,90 L24,90 Z" fill={tc||EMPTY}/>
+      <path d="M36,33 L54,40 L55,90 L36,90 Z" fill={tc||EMPTY}/>
+      <rect x="24" y="33" width="12" height="59" fill={tc||EMPTY}/>
+      {/* 니트조끼 (민소매, 상의 위) */}
+      <path d="M26,33 L19,38 L19,90 L30,90 Z" fill={oc||EMPTY}/>
+      <path d="M34,33 L41,38 L41,90 L30,90 Z" fill={oc||EMPTY}/>
+      {/* 조끼 명암 */}
+      <path d="M26,33 L22,90 L19,90 L19,38 Z" fill={shade(oc||EMPTY,15)} opacity="0.2"/>
+      <path d="M34,33 L38,90 L41,90 L41,38 Z" fill={shade(oc||EMPTY,-20)} opacity="0.2"/>
+      {/* V넥 */}
+      <path d="M27,36 L30,46 L33,36" fill="none" stroke={shade(oc||EMPTY,-40)} strokeWidth="1.2" opacity="0.8"/>
+      <Head/>
+    </svg>
+  );
+}
+
+function StyleCPO({ oc, tc, bc, sc }) {
+  return (
+    <svg viewBox="0 0 60 158" style={{ display:'block', width:'100%' }}>
+      {/* 신발 (두툼한 청키솔) */}
+      <path d="M12,130 Q10,141 18,144 L28,144 Q31,144 31,140 L31,130 Z" fill={sc||EMPTY}/>
+      <path d="M29,130 L29,140 Q29,144 32,144 L42,144 Q50,141 48,130 Z" fill={sc||EMPTY}/>
+      <rect x="10" y="139" width="22" height="5" rx="3" fill={shade(sc||EMPTY,-40)} opacity="0.6"/>
+      <rect x="28" y="139" width="22" height="5" rx="3" fill={shade(sc||EMPTY,-40)} opacity="0.6"/>
+      {/* 하의 */}
+      <path d="M24,97 L22,97 L18,130 L28,130 L26,97 Z" fill={bc||EMPTY}/>
+      <path d="M36,97 L38,97 L42,130 L32,130 L34,97 Z" fill={bc||EMPTY}/>
+      <line x1="26" y1="104" x2="24" y2="126" stroke={shade(bc||EMPTY,-18)} strokeWidth="0.9" opacity="0.3"/>
+      <line x1="34" y1="104" x2="36" y2="126" stroke={shade(bc||EMPTY,-18)} strokeWidth="0.9" opacity="0.3"/>
+      {/* 후드/이너 (칼라 부분 노출) */}
+      <rect x="24" y="33" width="12" height="20" rx="1" fill={tc||EMPTY}/>
+      {/* CPO 재킷 (힙 기장, 박시) */}
+      <path d="M24,33 L6,41 L5,97 L26,97 L24,33 Z" fill={oc||EMPTY}/>
+      <path d="M36,33 L54,41 L55,97 L34,97 L36,33 Z" fill={oc||EMPTY}/>
+      {/* 재킷 명암 */}
+      <path d="M24,33 L22,97 L26,97 Z" fill={shade(oc||EMPTY,-22)} opacity="0.25"/>
+      <path d="M36,33 L38,97 L34,97 Z" fill={shade(oc||EMPTY,-22)} opacity="0.25"/>
+      {/* 가슴 포켓 */}
+      <rect x="10" y="52" width="11" height="9" rx="1.5" fill={shade(oc||EMPTY,-25)} opacity="0.55"/>
+      <rect x="39" y="52" width="11" height="9" rx="1.5" fill={shade(oc||EMPTY,-25)} opacity="0.55"/>
+      {/* 오픈 칼라 */}
+      <path d="M26,36 L30,46 L34,36" fill="none" stroke={shade(oc||EMPTY,-35)} strokeWidth="1.2" opacity="0.7"/>
+      {/* 밑단선 */}
+      <line x1="5" y1="97" x2="55" y2="97" stroke={shade(oc||EMPTY,-35)} strokeWidth="0.7" opacity="0.4"/>
+      <Head/>
+    </svg>
+  );
+}
+
+function StyleRider({ oc, tc, bc, sc }) {
+  return (
+    <svg viewBox="0 0 60 158" style={{ display:'block', width:'100%' }}>
+      {/* 부츠 (발목 높이) */}
+      <path d="M16,126 L16,140 Q16,145 21,145 L28,145 Q31,145 31,142 L31,126 Z" fill={sc||EMPTY}/>
+      <path d="M29,126 L29,142 Q29,145 32,145 L39,145 Q44,145 44,142 L44,126 Z" fill={sc||EMPTY}/>
+      <rect x="15" y="138" width="17" height="7" rx="2" fill={shade(sc||EMPTY,-40)} opacity="0.6"/>
+      <rect x="28" y="138" width="17" height="7" rx="2" fill={shade(sc||EMPTY,-40)} opacity="0.6"/>
+      {/* 하의 (슬림핏) */}
+      <path d="M25,88 L23,88 L20,126 L30,126 L28,88 Z" fill={bc||EMPTY}/>
+      <path d="M35,88 L37,88 L40,126 L30,126 L32,88 Z" fill={bc||EMPTY}/>
+      {/* 터틀넥 (재킷 위아래 노출) */}
+      <rect x="25" y="33" width="10" height="20" rx="2" fill={tc||EMPTY}/>
+      <rect x="25" y="86" width="10" height="10" fill={tc||EMPTY}/>
+      {/* 라이더 재킷 (짧은 기장) */}
+      <path d="M25,40 L7,46 L6,88 L27,88 L25,40 Z" fill={oc||EMPTY}/>
+      <path d="M35,40 L53,46 L54,88 L33,88 L35,40 Z" fill={oc||EMPTY}/>
+      {/* 재킷 명암 */}
+      <path d="M25,40 L23,88 L27,88 Z" fill={shade(oc||EMPTY,-22)} opacity="0.25"/>
+      <path d="M35,40 L37,88 L33,88 Z" fill={shade(oc||EMPTY,-22)} opacity="0.25"/>
+      {/* 비대칭 지퍼라인 */}
+      <line x1="30" y1="42" x2="28" y2="87" stroke={shade(oc||EMPTY,-50)} strokeWidth="1.1" opacity="0.7"/>
+      <circle cx="28" cy="87" r="1.2" fill={shade(oc||EMPTY,-40)} opacity="0.8"/>
+      {/* 칼라 */}
+      <path d="M26,42 L30,38 L34,42" fill="none" stroke={shade(oc||EMPTY,-30)} strokeWidth="1.2" opacity="0.8"/>
+      {/* 밑단선 */}
+      <line x1="6" y1="88" x2="54" y2="88" stroke={shade(oc||EMPTY,-35)} strokeWidth="0.7" opacity="0.4"/>
+      <Head/>
+    </svg>
+  );
+}
+
+const STYLE_COMPONENTS = { coat: StyleCoat, vest: StyleVest, cpo: StyleCPO, rider: StyleRider };
+
+function StyleFigures({ outfit, height = 130 }) {
+  const oc = outfit.outer  ? byId(outfit.outer)?.hex  : null;
+  const tc = outfit.top    ? byId(outfit.top)?.hex    : null;
+  const bc = outfit.bottom ? byId(outfit.bottom)?.hex : null;
+  const sc = outfit.shoes  ? byId(outfit.shoes)?.hex  : null;
+  const props = { oc, tc, bc, sc };
+
+  return (
+    <div style={{ display:'flex', gap:4 }}>
+      {STYLES.map(s => {
+        const Comp = STYLE_COMPONENTS[s.id];
+        return (
+          <div key={s.id} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
+            <div style={{ width:'100%' }}>
+              <Comp {...props}/>
+            </div>
+            <span style={{ fontSize:9, color:'#555', whiteSpace:'nowrap' }}>{s.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── App ────────────────────────────────────────────────────────
+function App() {
+  const [fixed, setFixed] = useState({ top:null, bottom:null, outer:null, shoes:null });
+  const [activePart, setActivePart] = useState('top');
+  const [tab, setTab] = useState('tit');
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerHex, setPickerHex] = useState('#888888');
+
+  const hasFixed = Object.values(fixed).some(Boolean);
+
+  const recs = useMemo(() => {
+    if (!hasFixed) return null;
+    return {
+      tit: toneInToneRec(fixed),
+      tot: toneOnToneRec(fixed),
+      pin: pinterestRec(fixed),
+    };
+  }, [fixed, hasFixed]);
+
+  const selectColor = useCallback(id => {
+    setFixed(prev => ({ ...prev, [activePart]: prev[activePart]===id ? null : id }));
+  }, [activePart]);
+
+  const reset = () => setFixed({ top:null, bottom:null, outer:null, shoes:null });
+
+  const handlePickerChange = e => {
+    const hex = e.target.value;
+    setPickerHex(hex);
+    setFixed(prev => ({ ...prev, [activePart]: closestColor(hex).id }));
+  };
+
+  const currentRecs = recs
+    ? (tab==='tit' ? recs.tit : tab==='tot' ? recs.tot : recs.pin)
+    : [];
+
+  return (
+    <div style={{ maxWidth:430, margin:'0 auto', minHeight:'100vh', paddingBottom:60 }}>
+
+      {/* Header */}
+      <div style={{ padding:'48px 20px 12px', display:'flex', justifyContent:'space-between', alignItems:'flex-end' }}>
+        <div>
+          <div style={{ fontSize:22, fontWeight:700, letterSpacing:-0.5 }}>오늘의 코디</div>
+          <div style={{ fontSize:13, color:'#555', marginTop:3 }}>색상을 고르면 나머지를 맞춰드려요</div>
+        </div>
+        {hasFixed && (
+          <button onClick={reset} style={{ fontSize:12, color:'#555', background:'none', border:'none', cursor:'pointer' }}>
+            초기화
+          </button>
+        )}
+      </div>
+
+      {/* 메인 미리보기 — 현재 선택 색상 적용한 4가지 스타일 */}
+      <div style={{ padding:'4px 20px 12px' }}>
+        <StyleFigures outfit={fixed} height={130}/>
+      </div>
+
+      {/* 부위 선택 */}
+      <div style={{ display:'flex', gap:6, padding:'0 20px 14px' }}>
+        {PARTS.map(part => {
+          const color = fixed[part] ? byId(fixed[part]) : null;
+          const isActive = activePart===part;
+          return (
+            <button key={part} onClick={()=>setActivePart(part)} style={{
+              flex:1, padding:'8px 4px', borderRadius:12, border:'none',
+              background: isActive ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)',
+              outline: isActive ? '1.5px solid rgba(255,255,255,0.22)' : '1.5px solid transparent',
+              cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:5,
+              transition:'all 0.15s',
+            }}>
+              <div style={{
+                width:30, height:30, borderRadius:8,
+                background: color ? color.hex : '#252525',
+                border:'1px solid rgba(255,255,255,0.07)',
+                display:'flex', alignItems:'center', justifyContent:'center',
+              }}>
+                {!color && <span style={{ fontSize:14, opacity:0.2 }}>+</span>}
+              </div>
+              <span style={{ fontSize:11, color: isActive ? '#bbb' : '#444' }}>{PART_META[part]}</span>
+              {color && <span style={{ fontSize:9, color:'#555' }}>{color.name}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 색상 팔레트 */}
+      <div style={{ padding:'0 20px 18px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+          <span style={{ fontSize:13, color:'#555' }}>{PART_META[activePart]} 색상 선택</span>
+          <button onClick={()=>setShowPicker(p=>!p)} style={{
+            fontSize:12, color: showPicker ? '#bbb' : '#666',
+            background: showPicker ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)',
+            border:'none', borderRadius:20, padding:'4px 12px', cursor:'pointer',
+          }}>직접 선택</button>
+        </div>
+        {showPicker && (
+          <div style={{
+            marginBottom:12, display:'flex', alignItems:'center', gap:12,
+            padding:'10px 14px', background:'rgba(255,255,255,0.05)', borderRadius:12,
+          }}>
+            <input type="color" value={pickerHex} onChange={handlePickerChange}
+              style={{ width:36, height:36, border:'none', borderRadius:8, cursor:'pointer', padding:0, background:'none' }}/>
+            <div>
+              <div style={{ fontSize:13, color:'#bbb' }}>{pickerHex}</div>
+              <div style={{ fontSize:11, color:'#555', marginTop:2 }}>가장 가까운 팔레트 색상으로 자동 매핑</div>
+            </div>
+          </div>
+        )}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(8, 1fr)', gap:8 }}>
+          {COLORS.map(color => {
+            const sel = fixed[activePart]===color.id;
+            return (
+              <button key={color.id} onClick={()=>selectColor(color.id)} title={color.name} style={{
+                width:'100%', aspectRatio:'1', borderRadius:'50%', border:'none',
+                background:color.hex,
+                outline: sel ? '2.5px solid white' : '2px solid rgba(255,255,255,0.06)',
+                outlineOffset: sel ? '2px' : '0px',
+                cursor:'pointer',
+                transform: sel ? 'scale(1.15)' : 'scale(1)',
+                transition:'transform 0.15s',
+              }}/>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 구분선 */}
+      {recs && <div style={{ height:1, background:'rgba(255,255,255,0.06)', margin:'0 20px 16px' }}/>}
+
+      {/* 추천 섹션 */}
+      {recs && (
+        <div style={{ padding:'0 20px' }}>
+          <div style={{ display:'flex', gap:6, marginBottom:12 }}>
+            {[['tit','톤인톤'],['tot','톤온톤'],['pin','추천조합']].map(([id,label])=>(
+              <button key={id} onClick={()=>setTab(id)} style={{
+                flex:1, padding:'9px 0', borderRadius:12, border:'none',
+                background: tab===id ? 'white' : 'rgba(255,255,255,0.07)',
+                color: tab===id ? '#111' : '#666',
+                fontWeight: tab===id ? 600 : 400,
+                fontSize:13, cursor:'pointer', transition:'all 0.2s',
+              }}>{label}</button>
+            ))}
+          </div>
+          <div style={{ fontSize:12, color:'#444', marginBottom:14 }}>
+            {tab==='tit' && '같은 밝기 계열 색상으로 통일감 있는 코디'}
+            {tab==='tot' && '같은 색 계열, 명도를 달리한 그라데이션 코디'}
+            {tab==='pin' && '실제로 많이 입는 인기 스타일 기반 추천'}
+          </div>
+
+          {currentRecs.length > 0 ? currentRecs.map((item, i) => {
+            const outfit = item.outfit || item;
+            return (
+              <div key={i} style={{
+                background:'rgba(255,255,255,0.04)', borderRadius:18,
+                padding:'16px 14px', marginBottom:12,
+                border:'1px solid rgba(255,255,255,0.06)',
+              }}>
+                {/* 이름 & 스타일 태그 */}
+                {item.name && (
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                    <span style={{ fontWeight:600, fontSize:14 }}>{item.name}</span>
+                    <span style={{
+                      fontSize:10, color:'#666',
+                      background:'rgba(255,255,255,0.07)',
+                      padding:'2px 8px', borderRadius:20,
+                    }}>{item.style}</span>
+                  </div>
+                )}
+
+                {/* 4가지 스타일 피규어 */}
+                <StyleFigures outfit={outfit}/>
+
+                {/* 색상 스와치 */}
+                <div style={{ display:'flex', gap:6, marginTop:12 }}>
+                  {PARTS.map(part => {
+                    const c = byId(outfit[part]);
+                    return (
+                      <div key={part} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+                        <div style={{
+                          width:'100%', height:20, borderRadius:6,
+                          background: c ? c.hex : '#252525',
+                          border:'1px solid rgba(255,255,255,0.08)',
+                        }}/>
+                        <span style={{ fontSize:9, color:'#555' }}>{PART_META[part]}</span>
+                        <span style={{ fontSize:9, color:'#444', textAlign:'center' }}>{c?.name||'-'}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }) : (
+            <div style={{ textAlign:'center', padding:'30px 0', color:'#444', fontSize:13 }}>
+              일치하는 조합을 찾지 못했어요
+            </div>
+          )}
+        </div>
+      )}
+
+      {!recs && (
+        <div style={{ textAlign:'center', padding:'16px 20px 40px', color:'#333' }}>
+          <div style={{ fontSize:14, lineHeight:1.8 }}>위에서 원하는 부위를 선택하고<br/>색상을 고르면 코디를 추천해드려요</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

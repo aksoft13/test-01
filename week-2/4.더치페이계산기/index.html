@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>더치페이 계산기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --bg:       #F2F1EE;
+      --surface:  #FAFAF8;
+      --border:   #D4D3CE;
+      --border-strong: #A8A7A2;
+      --text:     #1A1916;
+      --muted:    #7A7974;
+      --subtle:   #C0BFB9;
+      --accent:   #FFCD00;
+      --accent-text: #1A1916;
+      --danger:   #C0392B;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: -0.01em;
+    }
+
+    /* ── Typography ── */
+    .label {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .mono {
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* ── Input ── */
+    .field {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+      border-radius: 0;
+      -webkit-appearance: none;
+    }
+    .field:focus { border-color: var(--text); }
+    .field::placeholder { color: var(--subtle); }
+    .field:disabled { opacity: 0.35; cursor: not-allowed; background: var(--bg); }
+
+    select.field { cursor: pointer; }
+
+    /* ── Button ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: 1px solid transparent;
+      outline: none;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+      white-space: nowrap;
+      border-radius: 0;
+      padding: 9px 16px;
+    }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--text);
+      color: #FAFAF8;
+      border-color: var(--text);
+    }
+    .btn-primary:not(:disabled):hover { background: #2E2D2A; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border-color: var(--border);
+    }
+    .btn-ghost:not(:disabled):hover { border-color: var(--border-strong); color: var(--text); }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: none;
+      padding: 2px 6px;
+      font-size: 16px;
+      letter-spacing: 0;
+      text-transform: none;
+      font-weight: 300;
+    }
+    .btn-danger:hover { color: #8B1A12; }
+
+    /* ── Toggle ── */
+    .toggle-group { display: flex; border: 1px solid var(--border); }
+    .toggle-btn {
+      flex: 1;
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+      border: none;
+      border-right: 1px solid var(--border);
+      transition: background 0.12s, color 0.12s;
+      outline: none;
+    }
+    .toggle-btn:last-child { border-right: none; }
+    .toggle-btn.active { background: var(--text); color: #FAFAF8; }
+    .toggle-btn:not(.active):hover { background: var(--bg); color: var(--text); }
+
+    /* ── Tip selector ── */
+    .tip-group { display: flex; border: 1px solid var(--border); }
+    .tip-btn {
+      flex: 1;
+      padding: 8px 4px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+      border: none;
+      border-right: 1px solid var(--border);
+      transition: background 0.12s, color 0.12s;
+      outline: none;
+    }
+    .tip-btn:last-child { border-right: none; }
+    .tip-btn.active { background: var(--accent); color: var(--accent-text); font-weight: 500; }
+    .tip-btn:not(.active):hover { background: var(--bg); color: var(--text); }
+
+    /* ── Section ── */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .section-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .section-body { padding: 20px; }
+
+    /* ── Participant tag ── */
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 400;
+      padding: 5px 10px 5px 12px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+    }
+    .tag-remove {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--subtle);
+      font-size: 16px;
+      line-height: 1;
+      padding: 0;
+      transition: color 0.12s;
+    }
+    .tag-remove:hover { color: var(--danger); }
+
+    /* ── Order row ── */
+    .order-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .order-row:last-child { border-bottom: none; }
+
+    /* ── Result card ── */
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 20px;
+    }
+    .result-card.highlighted {
+      border-color: var(--text);
+    }
+    .result-amount {
+      font-family: 'DM Mono', monospace;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    /* ── Total bar ── */
+    .total-bar {
+      background: var(--text);
+      color: #FAFAF8;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .total-amount {
+      font-family: 'DM Mono', monospace;
+      font-size: 28px;
+      font-weight: 500;
+      letter-spacing: -0.03em;
+    }
+
+    /* ── Divider ── */
+    .divider { height: 1px; background: var(--border); margin: 0; }
+
+    /* ── Checkbox ── */
+    .checkbox-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .checkbox-wrap input[type="checkbox"] {
+      width: 14px; height: 14px;
+      border: 1px solid var(--border-strong);
+      border-radius: 0;
+      cursor: pointer;
+      accent-color: var(--text);
+    }
+
+    /* ── Empty state ── */
+    .empty {
+      text-align: center;
+      padding: 32px 0;
+      color: var(--subtle);
+      font-size: 13px;
+    }
+    .empty-rule {
+      display: block;
+      width: 24px;
+      height: 1px;
+      background: var(--border);
+      margin: 0 auto 12px;
+    }
+
+    /* ── Scrollable ── */
+    .scroll-area { max-height: 240px; overflow-y: auto; }
+    .scroll-area::-webkit-scrollbar { width: 3px; }
+    .scroll-area::-webkit-scrollbar-track { background: transparent; }
+    .scroll-area::-webkit-scrollbar-thumb { background: var(--border); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useCallback } = React;
+
+    // ── Utility ──────────────────────────────────────────────
+    function fmt(n) {
+      return '₩\u202F' + Math.round(n).toLocaleString('ko-KR');
+    }
+
+    let pid = 1, oid = 1;
+
+    // ── Participant Section ───────────────────────────────────
+    function ParticipantSection({ participants, onAdd, onRemove }) {
+      const [name, setName] = useState('');
+
+      const submit = () => {
+        const v = name.trim();
+        if (!v) return;
+        onAdd(v);
+        setName('');
+      };
+
+      return (
+        <div className="section">
+          <div className="section-header">
+            <span className="section-title">참여자</span>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
+              {participants.length}명
+            </span>
+          </div>
+          <div className="section-body">
+            <div style={{ display: 'flex', gap: 8, marginBottom: participants.length ? 16 : 0 }}>
+              <input
+                className="field"
+                style={{ flex: 1 }}
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && submit()}
+                placeholder="이름"
+              />
+              <button className="btn btn-primary" onClick={submit} disabled={!name.trim()}>
+                추가
+              </button>
+            </div>
+            {participants.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {participants.map(p => (
+                  <span key={p.id} className="tag">
+                    {p.name}
+                    <button className="tag-remove" onClick={() => onRemove(p.id)} aria-label="삭제">
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Order Section ─────────────────────────────────────────
+    function OrderSection({ participants, orders, onAdd, onRemove }) {
+      const [sel, setSel] = useState('');
+      const [menu, setMenu] = useState('');
+      const [price, setPrice] = useState('');
+
+      const canAdd = sel && menu.trim() && price;
+
+      const submit = () => {
+        if (!canAdd) return;
+        onAdd(sel, menu.trim(), Number(price));
+        setMenu('');
+        setPrice('');
+      };
+
+      const getName = id => participants.find(p => p.id === id)?.name ?? '—';
+      const subtotal = orders.reduce((s, o) => s + o.price, 0);
+
+      return (
+        <div className="section">
+          <div className="section-header">
+            <span className="section-title">주문 내역</span>
+            {orders.length > 0 && (
+              <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
+                소계 {fmt(subtotal)}
+              </span>
+            )}
+          </div>
+          <div className="section-body">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr auto', gap: 8, marginBottom: 20 }}>
+              <select
+                className="field"
+                value={sel}
+                onChange={e => setSel(e.target.value)}
+              >
+                <option value="">참여자</option>
+                {participants.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <input
+                className="field"
+                type="text"
+                value={menu}
+                onChange={e => setMenu(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && submit()}
+                placeholder="메뉴명"
+              />
+              <input
+                className="field"
+                type="number"
+                value={price}
+                onChange={e => setPrice(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && submit()}
+                placeholder="가격"
+                min="0"
+              />
+              <button className="btn btn-primary" onClick={submit} disabled={!canAdd}>
+                추가
+              </button>
+            </div>
+
+            {orders.length === 0 ? (
+              <div className="empty">
+                <em className="empty-rule" />
+                주문 항목을 추가하세요
+              </div>
+            ) : (
+              <div className="scroll-area">
+                {orders.map(o => (
+                  <div key={o.id} className="order-row">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)', minWidth: 48 }}>
+                        {getName(o.participantId)}
+                      </span>
+                      <span style={{ fontSize: 14, color: 'var(--text)' }}>{o.menu}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span className="mono" style={{ fontSize: 13 }}>{fmt(o.price)}</span>
+                      <button className="btn-danger" onClick={() => onRemove(o.id)} aria-label="삭제">×</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Settings Section ──────────────────────────────────────
+    function SettingsSection({ settings, onUpdate }) {
+      const tipOptions = [0, 5, 10, 15];
+
+      return (
+        <div className="section">
+          <div className="section-header">
+            <span className="section-title">정산 설정</span>
+          </div>
+          <div className="section-body">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+
+              {/* Split mode */}
+              <div>
+                <div className="label" style={{ marginBottom: 8 }}>정산 방식</div>
+                <div className="toggle-group">
+                  <button
+                    className={`toggle-btn${settings.splitMode === 'equal' ? ' active' : ''}`}
+                    onClick={() => onUpdate('splitMode', 'equal')}
+                  >
+                    균등 분배
+                  </button>
+                  <button
+                    className={`toggle-btn${settings.splitMode === 'individual' ? ' active' : ''}`}
+                    onClick={() => onUpdate('splitMode', 'individual')}
+                  >
+                    개별 계산
+                  </button>
+                </div>
+              </div>
+
+              {/* Tip */}
+              <div>
+                <div className="label" style={{ marginBottom: 8 }}>팁</div>
+                <div className="tip-group">
+                  {tipOptions.map(t => (
+                    <button
+                      key={t}
+                      className={`tip-btn${settings.tipRate === t ? ' active' : ''}`}
+                      onClick={() => onUpdate('tipRate', t)}
+                    >
+                      {t === 0 ? '없음' : `${t}%`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Discount */}
+              <div>
+                <div className="label" style={{ marginBottom: 8 }}>할인</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select
+                    className="field"
+                    style={{ width: 'auto', flex: '0 0 auto' }}
+                    value={settings.discountType}
+                    onChange={e => onUpdate('discountType', e.target.value)}
+                  >
+                    <option value="percent">%</option>
+                    <option value="amount">원</option>
+                  </select>
+                  <input
+                    className="field"
+                    type="number"
+                    value={settings.discountValue || ''}
+                    onChange={e => onUpdate('discountValue', Number(e.target.value))}
+                    min="0"
+                    placeholder={settings.discountType === 'percent' ? '할인율' : '할인 금액'}
+                  />
+                </div>
+              </div>
+
+              {/* Tax */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div className="label">세금</div>
+                  <label className="checkbox-wrap">
+                    <input
+                      type="checkbox"
+                      checked={settings.taxEnabled}
+                      onChange={e => onUpdate('taxEnabled', e.target.checked)}
+                    />
+                    <span style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '0.04em' }}>적용</span>
+                  </label>
+                </div>
+                <input
+                  className="field"
+                  type="number"
+                  value={settings.taxRate}
+                  onChange={e => onUpdate('taxRate', Number(e.target.value))}
+                  disabled={!settings.taxEnabled}
+                  min="0"
+                  max="100"
+                  placeholder="세율 (%)"
+                />
+              </div>
+
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Result Section ────────────────────────────────────────
+    function ResultSection({ results, totalFinal, settings }) {
+      if (results.length === 0) return null;
+
+      const pills = [];
+      if (settings.discountValue > 0) {
+        pills.push(settings.discountType === 'percent'
+          ? `할인 ${settings.discountValue}%`
+          : `할인 ${fmt(settings.discountValue)}`);
+      }
+      if (settings.taxEnabled && settings.taxRate > 0) pills.push(`세금 ${settings.taxRate}%`);
+      if (settings.tipRate > 0) pills.push(`팁 ${settings.tipRate}%`);
+
+      return (
+        <div className="section">
+          <div className="section-header">
+            <span className="section-title">정산 결과</span>
+          </div>
+
+          {/* Total bar */}
+          <div className="total-bar">
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#AAAAAA', marginBottom: 4 }}>
+                최종 합계
+              </div>
+              <div className="total-amount">{fmt(totalFinal)}</div>
+            </div>
+            {pills.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                {pills.map((p, i) => (
+                  <span key={i} style={{ fontSize: 10, letterSpacing: '0.08em', color: '#AAAAAA', textTransform: 'uppercase' }}>
+                    {p}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Per-person cards */}
+          <div style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+            {results.map(r => (
+              <div key={r.participantId} className="result-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                  <div>
+                    <div className="label" style={{ marginBottom: 4 }}>정산 금액</div>
+                    <div className="result-amount">{fmt(r.amount)}</div>
+                  </div>
+                </div>
+                <div className="divider" style={{ marginBottom: 12 }} />
+                <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 8 }}>{r.name}</div>
+                {r.orders.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {r.orders.map((o, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{o.menu}</span>
+                        <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>{fmt(o.price)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span style={{ fontSize: 11, color: 'var(--subtle)' }}>
+                    {settings.splitMode === 'equal' ? '균등 분배' : '주문 없음'}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ── App ───────────────────────────────────────────────────
+    function App() {
+      const [participants, setParticipants] = useState([]);
+      const [orders, setOrders] = useState([]);
+      const [settings, setSettings] = useState({
+        splitMode: 'equal',
+        tipRate: 0,
+        taxEnabled: false,
+        taxRate: 10,
+        discountType: 'percent',
+        discountValue: 0,
+      });
+
+      const addParticipant = useCallback(name =>
+        setParticipants(p => [...p, { id: String(pid++), name }]), []);
+
+      const removeParticipant = useCallback(id => {
+        setParticipants(p => p.filter(x => x.id !== id));
+        setOrders(o => o.filter(x => x.participantId !== id));
+      }, []);
+
+      const addOrder = useCallback((participantId, menu, price) =>
+        setOrders(o => [...o, { id: String(oid++), participantId, menu, price }]), []);
+
+      const removeOrder = useCallback(id =>
+        setOrders(o => o.filter(x => x.id !== id)), []);
+
+      const updateSettings = useCallback((k, v) =>
+        setSettings(s => ({ ...s, [k]: v })), []);
+
+      const reset = useCallback(() => {
+        setParticipants([]);
+        setOrders([]);
+        setSettings({ splitMode: 'equal', tipRate: 0, taxEnabled: false, taxRate: 10, discountType: 'percent', discountValue: 0 });
+      }, []);
+
+      const { results, totalFinal } = useMemo(() => {
+        if (!participants.length || !orders.length)
+          return { results: [], totalFinal: 0 };
+
+        const subtotal = orders.reduce((s, o) => s + o.price, 0);
+
+        let base = subtotal;
+        if (settings.discountValue > 0) {
+          base = settings.discountType === 'percent'
+            ? subtotal * (1 - Math.min(settings.discountValue, 100) / 100)
+            : Math.max(0, subtotal - settings.discountValue);
+        }
+        if (settings.taxEnabled && settings.taxRate > 0)
+          base *= (1 + settings.taxRate / 100);
+        if (settings.tipRate > 0)
+          base *= (1 + settings.tipRate / 100);
+
+        const multiplier = subtotal > 0 ? base / subtotal : 0;
+
+        const results = settings.splitMode === 'equal'
+          ? participants.map(p => ({
+              participantId: p.id,
+              name: p.name,
+              amount: base / participants.length,
+              orders: orders.filter(o => o.participantId === p.id),
+            }))
+          : participants.map(p => {
+              const myOrders = orders.filter(o => o.participantId === p.id);
+              return {
+                participantId: p.id,
+                name: p.name,
+                amount: myOrders.reduce((s, o) => s + o.price, 0) * multiplier,
+                orders: myOrders,
+              };
+            });
+
+        return { results, totalFinal: base };
+      }, [participants, orders, settings]);
+
+      return (
+        <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+
+          {/* ── Header ── */}
+          <header style={{
+            background: 'var(--surface)',
+            borderBottom: '1px solid var(--border)',
+            position: 'sticky', top: 0, zIndex: 10,
+          }}>
+            <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+                <span style={{ fontWeight: 500, fontSize: 15, letterSpacing: '-0.02em', color: 'var(--text)' }}>
+                  더치페이 계산기
+                </span>
+                <span style={{ fontSize: 11, letterSpacing: '0.06em', color: 'var(--muted)', textTransform: 'uppercase' }}>
+                  Dutch Pay
+                </span>
+              </div>
+              <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={reset}>
+                초기화
+              </button>
+            </div>
+          </header>
+
+          {/* ── Main ── */}
+          <main style={{ maxWidth: 720, margin: '0 auto', padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <ParticipantSection
+              participants={participants}
+              onAdd={addParticipant}
+              onRemove={removeParticipant}
+            />
+            <OrderSection
+              participants={participants}
+              orders={orders}
+              onAdd={addOrder}
+              onRemove={removeOrder}
+            />
+            <SettingsSection settings={settings} onUpdate={updateSettings} />
+            <ResultSection results={results} totalFinal={totalFinal} settings={settings} />
+
+            {results.length === 0 && (
+              <div className="empty" style={{ marginTop: 48 }}>
+                <em className="empty-rule" />
+                참여자와 주문을 입력하면 정산 결과가 표시됩니다
+              </div>
+            )}
+          </main>
+
+          {/* ── Footer ── */}
+          <footer style={{ textAlign: 'center', padding: '32px 0', borderTop: '1px solid var(--border)', marginTop: 48 }}>
+            <span style={{ fontSize: 10, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--subtle)' }}>
+              Dutch Pay Calculator
+            </span>
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

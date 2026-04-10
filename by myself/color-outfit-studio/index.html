@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Color Studio - 실패없는 컬러 코디</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes copiedFlash {
+      0% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(0.8) translateY(-8px); }
+    }
+    .copied-toast {
+      animation: copiedFlash 0.8s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="min-h-screen" style="background:#f0ede6;">
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks Destructuring
+    // ========================================
+    const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+    // ========================================
+    // Color Math Utilities
+    // ========================================
+    function hexToRgb(hex) {
+      const h = hex.replace('#', '');
+      const num = parseInt(h, 16);
+      return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+    }
+
+    function rgbToHsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      if (max === min) {
+        h = s = 0;
+      } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+          case g: h = ((b - r) / d + 2) / 6; break;
+          case b: h = ((r - g) / d + 4) / 6; break;
+        }
+      }
+      return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)];
+    }
+
+    function hslToRgb(h, s, l) {
+      h /= 360; s /= 100; l /= 100;
+      let r, g, b;
+      if (s === 0) {
+        r = g = b = l;
+      } else {
+        const hue2rgb = (p, q, t) => {
+          if (t < 0) t += 1;
+          if (t > 1) t -= 1;
+          if (t < 1/6) return p + (q - p) * 6 * t;
+          if (t < 1/2) return q;
+          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+          return p;
+        };
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+      }
+      return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+    }
+
+    function hexToHsl(hex) {
+      const [r, g, b] = hexToRgb(hex);
+      return rgbToHsl(r, g, b);
+    }
+
+    function hslToHex(h, s, l) {
+      h = ((h % 360) + 360) % 360;
+      s = Math.max(0, Math.min(100, s));
+      l = Math.max(0, Math.min(100, l));
+      const [r, g, b] = hslToRgb(h, s, l);
+      return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+    }
+
+    function getLuminance(hex) {
+      const [r, g, b] = hexToRgb(hex);
+      return (0.299 * r + 0.587 * g + 0.114 * b) / 2.55;
+    }
+
+    function getTextColor(hex) {
+      return getLuminance(hex) > 55 ? '#1A1A1A' : '#FFFFFF';
+    }
+
+    function tintColor(hex, amount) {
+      const [r, g, b] = hexToRgb(hex);
+      const tr = Math.round(r + (255 - r) * amount);
+      const tg = Math.round(g + (255 - g) * amount);
+      const tb = Math.round(b + (255 - b) * amount);
+      return '#' + [tr, tg, tb].map(x => Math.min(255, x).toString(16).padStart(2, '0')).join('').toUpperCase();
+    }
+
+    // ========================================
+    // Shoe Color Constraints
+    // ========================================
+    const SHOE_ALLOWED = ['#1A1A1A', '#36454F', '#708090', '#D1D5DB', '#F5F5F5', '#FFFFF0', '#E8D5B7', '#C19A6B', '#8B6914'];
+
+    function snapShoeColor(hex) {
+      const [r1, g1, b1] = hexToRgb(hex);
+      let best = SHOE_ALLOWED[0], bestDist = Infinity;
+      for (const c of SHOE_ALLOWED) {
+        const [r2, g2, b2] = hexToRgb(c);
+        const d = (r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2;
+        if (d < bestDist) { bestDist = d; best = c; }
+      }
+      return best;
+    }
+
+    // ========================================
+    // Paint Canvas Background
+    // ========================================
+    function makeSeed(colors) {
+      return colors.reduce((s, c) => (s * 31 + parseInt(c.replace('#',''), 16)) | 0, 1);
+    }
+
+    function drawPaint(ctx, W, H, colors) {
+      let seed = makeSeed(colors.length ? colors : ['#cccccc']);
+      const rng = (a = 0, b = 1) => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) | 0;
+        return a + ((seed >>> 0) / 0xffffffff) * (b - a);
+      };
+
+      // Off-white linen base
+      ctx.fillStyle = '#f0ede6';
+      ctx.fillRect(0, 0, W, H);
+
+      const paintColors = colors.length ? colors : ['#b0b0a8'];
+
+      // --- helper: draw one thick palette-knife stroke ---
+      const stroke = (r, g, b, sx, sy, ex, ey, cp1x, cp1y, cp2x, cp2y, w, alpha) => {
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, ex, ey);
+        ctx.lineWidth = w;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+        ctx.stroke();
+      };
+
+      // --- Phase 1: large sweeping strokes per color ---
+      paintColors.forEach((hex, ci) => {
+        const [r, g, b] = hexToRgb(hex);
+        // Distribute stroke directions so colors cross each other naturally
+        const baseAngle = (ci / paintColors.length) * Math.PI * 0.75 - Math.PI * 0.25 + rng(-0.15, 0.15);
+
+        for (let s = 0; s < 7; s++) {
+          const sx = rng(-W * 0.15, W * 1.15);
+          const sy = rng(-H * 0.15, H * 1.15);
+          const len = rng(W * 0.55, W * 1.1);
+          const a = baseAngle + rng(-0.35, 0.35);
+          const ex = sx + len * Math.cos(a);
+          const ey = sy + len * Math.sin(a);
+          const bow = rng(-H * 0.18, H * 0.18);
+          const cp1x = sx + len * 0.3 * Math.cos(a) + bow * Math.sin(a);
+          const cp1y = sy + len * 0.3 * Math.sin(a) - bow * Math.cos(a);
+          const cp2x = sx + len * 0.7 * Math.cos(a) + bow * 0.6 * Math.sin(a);
+          const cp2y = sy + len * 0.7 * Math.sin(a) - bow * 0.6 * Math.cos(a);
+          const w = rng(W * 0.06, W * 0.20);
+          const alpha = rng(0.55, 0.82);
+
+          // Main body
+          stroke(r, g, b, sx, sy, ex, ey, cp1x, cp1y, cp2x, cp2y, w, alpha);
+
+          // Bright ridge highlight (palette knife center streak)
+          const hr = Math.min(r + 55, 255), hg = Math.min(g + 55, 255), hb = Math.min(b + 55, 255);
+          stroke(hr, hg, hb, sx, sy, ex, ey, cp1x, cp1y, cp2x, cp2y, w * rng(0.12, 0.22), rng(0.18, 0.32));
+
+          // Dark shadow edge
+          const dr = Math.max(r - 40, 0), dg = Math.max(g - 40, 0), db = Math.max(b - 40, 0);
+          const edgeOff = w * 0.42;
+          const perpX = Math.sin(a) * edgeOff, perpY = -Math.cos(a) * edgeOff;
+          stroke(dr, dg, db,
+            sx + perpX, sy + perpY, ex + perpX, ey + perpY,
+            cp1x + perpX, cp1y + perpY, cp2x + perpX, cp2y + perpY,
+            w * 0.08, rng(0.25, 0.45));
+        }
+
+        // --- Phase 2: bristle / scrape texture lines ---
+        for (let t = 0; t < 55; t++) {
+          const tx = rng(0, W);
+          const ty = rng(0, H);
+          const ta = baseAngle + rng(-0.2, 0.2);
+          const tl = rng(12, 70);
+          ctx.beginPath();
+          ctx.moveTo(tx, ty);
+          ctx.lineTo(tx + tl * Math.cos(ta), ty + tl * Math.sin(ta));
+          ctx.lineWidth = rng(0.4, 3.5);
+          ctx.strokeStyle = `rgba(${r},${g},${b},${rng(0.15, 0.55)})`;
+          ctx.stroke();
+        }
+      });
+
+      // --- Phase 3: white palette-knife sweeps (highlights & mixing zones) ---
+      const numWhite = 3 + Math.floor(rng(0, 3));
+      for (let w = 0; w < numWhite; w++) {
+        const sx = rng(0, W);
+        const sy = rng(0, H);
+        const a = rng(-Math.PI / 5, Math.PI / 5);
+        const len = rng(W * 0.25, W * 0.55);
+        const bow = rng(-H * 0.12, H * 0.12);
+        const ex = sx + len * Math.cos(a);
+        const ey = sy + len * Math.sin(a);
+        const cp1x = sx + len * 0.35 * Math.cos(a) + bow * Math.sin(a);
+        const cp1y = sy + len * 0.35 * Math.sin(a) - bow * Math.cos(a);
+        const cp2x = sx + len * 0.65 * Math.cos(a) + bow * 0.5 * Math.sin(a);
+        const cp2y = sy + len * 0.65 * Math.sin(a) - bow * 0.5 * Math.cos(a);
+        const ww = rng(W * 0.025, W * 0.07);
+        stroke(255, 255, 255, sx, sy, ex, ey, cp1x, cp1y, cp2x, cp2y, ww, rng(0.3, 0.6));
+        // ultra-bright center
+        stroke(255, 255, 255, sx, sy, ex, ey, cp1x, cp1y, cp2x, cp2y, ww * 0.18, rng(0.65, 0.9));
+      }
+
+      // --- Phase 4: very subtle vignette ---
+      const vg = ctx.createRadialGradient(W/2, H/2, H * 0.3, W/2, H/2, H * 0.85);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, 'rgba(0,0,0,0.18)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    function PaintCanvas({ colors }) {
+      const canvasRef = useRef(null);
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        let raf;
+        const draw = () => {
+          canvas.width  = window.innerWidth;
+          canvas.height = window.innerHeight;
+          drawPaint(canvas.getContext('2d'), canvas.width, canvas.height, colors);
+        };
+        draw();
+        const onResize = () => { clearTimeout(raf); raf = setTimeout(draw, 150); };
+        window.addEventListener('resize', onResize);
+        return () => { window.removeEventListener('resize', onResize); clearTimeout(raf); };
+      }, [colors]);
+
+      return (
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: 'fixed', top: 0, left: 0,
+            width: '100vw', height: '100vh',
+            zIndex: 0, pointerEvents: 'none',
+          }}
+        />
+      );
+    }
+
+    // ========================================
+    // Preset Color Data
+    // ========================================
+    const NEUTRAL_COLORS = [
+      { hex: '#1A1A1A', name: '블랙' },
+      { hex: '#36454F', name: '차콜' },
+      { hex: '#708090', name: '슬레이트' },
+      { hex: '#D1D5DB', name: '라이트그레이' },
+      { hex: '#F5F5F5', name: '오프화이트' },
+      { hex: '#FFFFF0', name: '아이보리' },
+      { hex: '#FFFDD0', name: '크림' },
+      { hex: '#E8D5B7', name: '베이지' },
+      { hex: '#C19A6B', name: '카멜' },
+      { hex: '#8B6914', name: '브라운' },
+    ];
+
+    const CHROMATIC_COLORS = [
+      { hex: '#1B3A5C', name: '네이비' },
+      { hex: '#4682B4', name: '스틸블루' },
+      { hex: '#87CEEB', name: '스카이블루' },
+      { hex: '#2D5A27', name: '포레스트그린' },
+      { hex: '#6B7B3A', name: '올리브' },
+      { hex: '#9CAF88', name: '세이지' },
+      { hex: '#722F37', name: '와인' },
+      { hex: '#800020', name: '버건디' },
+      { hex: '#CC2222', name: '레드' },
+      { hex: '#C67C52', name: '테라코타' },
+      { hex: '#C68B00', name: '머스타드' },
+      { hex: '#E8D5A3', name: '샌드' },
+      { hex: '#C9A9A6', name: '더스티로즈' },
+      { hex: '#B8A9C9', name: '라벤더' },
+    ];
+
+    // ========================================
+    // Curated Palettes (Pinterest Reference)
+    // ========================================
+    const CURATED_PALETTES = [
+      { name: '네이비+화이트+카멜', desc: '클래식 마린 룩의 정석', outer: '#1B3A5C', top: '#F5F5F5', bottom: '#1B3A5C', shoes: '#C19A6B' },
+      { name: '블랙+화이트+레드', desc: '타임리스한 모노크롬에 레드 포인트', outer: '#1A1A1A', top: '#F5F5F5', bottom: '#1A1A1A', shoes: '#CC2222' },
+      { name: '카멜+화이트+블랙', desc: '우아하고 세련된 어스톤 베이직', outer: '#C19A6B', top: '#FFFFF0', bottom: '#1A1A1A', shoes: '#C19A6B' },
+      { name: '올리브+크림+브라운', desc: '내추럴한 어스톤 밀리터리 룩', outer: '#6B7B3A', top: '#FFFDD0', bottom: '#8B6914', shoes: '#C19A6B' },
+      { name: '버건디+베이지+카멜', desc: '가을 시즌 리치 컬러 조합', outer: '#722F37', top: '#E8D5B7', bottom: '#36454F', shoes: '#C19A6B' },
+      { name: '그레이+머스타드+화이트', desc: '모던하고 트렌디한 포인트 조합', outer: '#36454F', top: '#C68B00', bottom: '#708090', shoes: '#F5F5F5' },
+      { name: '러스트+크림+브라운', desc: '따뜻한 테라코타 어스톤 가을 룩', outer: '#C67C52', top: '#FFFDD0', bottom: '#8B6914', shoes: '#C19A6B' },
+      { name: '세이지+크림+탄', desc: '자연스럽고 서정적인 그린 어스톤', outer: '#9CAF88', top: '#FFFDD0', bottom: '#8B6914', shoes: '#E8D5B7' },
+      { name: '네이비+버건디+크림', desc: '깊고 리치한 가을/겨울 배색', outer: '#1B3A5C', top: '#FFFFF0', bottom: '#722F37', shoes: '#8B6914' },
+      { name: '틸+골드 클래식', desc: '포레스트틸과 황금색의 대담한 조화', outer: '#28696A', top: '#F4AE3F', bottom: '#F0E6D7', shoes: '#213058' },
+      { name: '네이비+레드+골드', desc: '삼색 컬러블로킹의 정석', outer: '#1E459F', top: '#CF2A2A', bottom: '#FABD32', shoes: '#E1DCCA' },
+      { name: '블랙+머스타드+올리브', desc: '강렬한 대비의 스트리트 어스톤 무드', outer: '#272727', top: '#C68B00', bottom: '#6B7B3A', shoes: '#E9E3D5' },
+      { name: '그레이+옐로우+네이비', desc: '차분함 속 옐로우 포인트', outer: '#1E2F4D', top: '#E5D0A5', bottom: '#F6B91C', shoes: '#36454F' },
+      { name: '버터+체리+올리브', desc: '따뜻한 어스톤 3색 조합', outer: '#4F6B15', top: '#FFEDAD', bottom: '#75070C', shoes: '#F0E6DA' },
+      { name: '문라이즈 선셋', desc: '다크틸에서 골드로 이어지는 자연 팔레트', outer: '#184146', top: '#297272', bottom: '#E2E0C8', shoes: '#D3A446' },
+      { name: '오션블루+오렌지', desc: '바다색과 오렌지의 보색 대비', outer: '#053F5C', top: '#429EBD', bottom: '#8FE7F5', shoes: '#F7AD19' },
+      { name: '퍼플+골드+블랙', desc: '로열하고 럭셔리한 퍼플 조합', outer: '#4A2060', top: '#C68B00', bottom: '#1A1A1A', shoes: '#C19A6B' },
+      { name: '스카이블루+화이트+데님', desc: '청량하고 캐주얼한 올블루 조합', outer: '#87CEEB', top: '#F5F5F5', bottom: '#2E4A6B', shoes: '#F5F5F5' },
+      { name: '핑크+네이비+화이트', desc: '페미닌하고 프레피한 클래식 조합', outer: '#C9A9A6', top: '#F5F5F5', bottom: '#1B3A5C', shoes: '#1A1A1A' },
+      { name: '코발트+화이트+카멜', desc: '비비드 블루의 화이트·카멜 안정화', outer: '#0047AB', top: '#FFFFF0', bottom: '#36454F', shoes: '#C19A6B' },
+    ];
+
+    // ========================================
+    // ========================================
+    // Combination Generation Logic (Pinterest-inspired)
+    // ========================================
+    function generateCombinations(activeItem, hex, lockedColors = {}) {
+      const [H, S, L] = hexToHsl(hex);
+      const fix = (item, generated) => {
+        if (item === activeItem) return hex.toUpperCase();
+        if (lockedColors[item]) return lockedColors[item].toUpperCase();
+        // Avoid colors identical to any locked color
+        const lockedVals = Object.values(lockedColors).filter(Boolean).map(c => c.toUpperCase());
+        let result = generated;
+        if (lockedVals.includes(result.toUpperCase())) {
+          const [h, s, l] = hexToHsl(result);
+          result = hslToHex(h, s, l > 50 ? Math.max(l - 30, 10) : Math.min(l + 30, 90));
+        }
+        if (item === 'shoes') return snapShoeColor(result);
+        return result;
+      };
+
+      // Fashion neutrals
+      const BLK  = '#1A1A1A', CHAR = '#36454F', LGRY = '#D1D5DB';
+      const WHT  = '#F5F5F5', IVR  = '#FFFFF0', CRM  = '#FFFDD0';
+      const BGE  = '#E8D5B7', CML  = '#C19A6B', BRN  = '#8B6914';
+      const NVY  = '#1B3A5C', OLV  = '#6B7B3A', SGE  = '#9CAF88';
+      const BRG  = '#722F37', MST  = '#C68B00', RST  = '#C67C52';
+
+      const mk = (name, eng, outer, top, bottom, shoes, desc) => ({
+        name, eng, desc,
+        outer:  fix('outer',  outer),
+        top:    fix('top',    top),
+        bottom: fix('bottom', bottom),
+        shoes:  fix('shoes',  shoes),
+      });
+
+      const isNeutral = S < 18;
+      const isLight   = L > 65;
+      const isDark    = L < 32;
+      const isVibrant = S > 55;
+      const isMuted   = S >= 18 && S < 42;
+      const compH     = (H + 180) % 360;
+
+      const getBase = () => {
+        // ── 무채색 다크 (블랙 · 차콜) ──────────────────────────────
+        if (isNeutral && isDark) return [
+          mk('올블랙',       'All Black',       BLK,  hslToHex(H,S,Math.min(L+10,90)), BLK,  BLK,  '블랙 계열만으로 완성하는 시크한 올블랙 룩'),
+          mk('블랙+화이트',  'Black & White',   hex,  WHT,  CHAR, LGRY, '블랙과 화이트의 타임리스한 모노크롬 코디'),
+          mk('블랙+레드',    'Black & Red',     hex,  '#CC2222', hex,  '#CC2222', '블랙과 레드의 강렬한 대비 포인트 코디'),
+          mk('블랙+베이지',  'Black & Beige',   hex,  BGE,  CHAR, CML,  '블랙과 베이지의 세련된 어스톤 조합'),
+          mk('블랙+머스타드','Black & Mustard',  hex,  MST,  CHAR, BRN,  '블랙과 머스타드의 트렌디한 컨트라스트 룩'),
+          mk('블랙+네이비',  'Black & Navy',    NVY,  WHT,  hex,  BLK,  '블랙과 네이비, 화이트의 스마트한 클래식 트리오'),
+        ];
+        // ── 무채색 라이트 (화이트 · 크림 · 아이보리) ─────────────────
+        if (isNeutral && isLight) return [
+          mk('올화이트',       'All White',      WHT,  hex,  CRM,  BGE,  '화이트 계열로 완성하는 클린하고 미니멀한 룩'),
+          mk('화이트+네이비',  'White & Navy',   NVY,  hex,  NVY,  BLK,  '화이트와 네이비의 클래식한 마린 조합'),
+          mk('화이트+블랙',    'White & Black',  BLK,  hex,  CHAR, BLK,  '화이트와 블랙의 모던하고 타임리스한 코디'),
+          mk('화이트+카멜',    'White & Camel',  CML,  hex,  BGE,  BRN,  '화이트와 카멜의 따뜻하고 우아한 어스톤'),
+          mk('화이트+올리브',  'White & Olive',  OLV,  hex,  OLV,  BRN,  '화이트와 올리브의 내추럴하고 트렌디한 조합'),
+          mk('화이트+버건디',  'White & Burgundy',BRG, hex,  CHAR, BRN,  '화이트와 버건디의 세련된 가을 시즌 조합'),
+        ];
+        // ── 무채색 미드 (그레이 · 슬레이트) ─────────────────────────
+        if (isNeutral) return [
+          mk('그레이 토널',    'Grey Tonal',     CHAR, hex,  BLK,  WHT,  '그레이 계열의 세련된 무채색 톤온톤 룩'),
+          mk('그레이+네이비',  'Grey & Navy',    NVY,  hex,  CHAR, BLK,  '그레이와 네이비의 스마트하고 클래식한 조합'),
+          mk('그레이+버건디',  'Grey & Burgundy',BRG,  hex,  CHAR, BLK,  '그레이와 버건디의 가을 시즌 시크 조합'),
+          mk('그레이+머스타드','Grey & Mustard',  hex,  MST,  CHAR, BLK,  '그레이와 머스타드의 모던한 포인트 코디'),
+          mk('그레이+카멜',    'Grey & Camel',   CML,  hex,  CHAR, BRN,  '그레이와 카멜의 고급스럽고 따뜻한 어스톤'),
+          mk('그레이+올리브',  'Grey & Olive',   OLV,  hex,  BLK,  BRN,  '그레이와 올리브의 내추럴한 어스톤 조합'),
+        ];
+        // ── 네이비 계열 ──────────────────────────────────────────────
+        if (H >= 195 && H <= 255 && isDark && S >= 30) return [
+          mk('네이비+화이트',  'Navy & White',   hex,  WHT,  CHAR, WHT,  '네이비와 화이트의 클래식한 마린 룩'),
+          mk('네이비+베이지',  'Navy & Beige',   hex,  BGE,  CHAR, CML,  '네이비와 베이지의 고급스러운 클래식 조합'),
+          mk('네이비+레드',    'Navy & Red',     hex,  '#CC2222', BLK, WHT, '네이비, 레드, 화이트의 대담한 삼색 조합'),
+          mk('네이비+골드',    'Navy & Gold',    hex,  MST,  hslToHex(H,S,Math.min(L+15,70)), CML, '네이비와 골드의 고급스러운 클래식 조합'),
+          mk('네이비+버건디',  'Navy & Burgundy',hex,  IVR,  BRG,  BRN,  '네이비와 버건디의 가을 리치 배색'),
+          mk('네이비+올리브',  'Navy & Olive',   hex,  BGE,  OLV,  CML,  '네이비와 올리브의 밀리터리 어스톤 조합'),
+        ];
+        // ── 버건디 · 와인 · 다크레드 ─────────────────────────────────
+        if ((H >= 330 || H < 20) && isDark && S > 38) return [
+          mk('버건디+아이보리','Burgundy & Ivory',hex, IVR,  BLK,  BRN,  '버건디와 아이보리의 우아한 클래식 조합'),
+          mk('버건디+카멜',   'Burgundy & Camel',hex,  BGE,  CHAR, CML,  '버건디와 카멜의 따뜻하고 세련된 가을 룩'),
+          mk('버건디+네이비', 'Burgundy & Navy', NVY,  IVR,  hex,  BLK,  '버건디와 네이비의 깊고 리치한 색상 조합'),
+          mk('버건디+올리브', 'Burgundy & Olive',OLV,  BGE,  hex,  BRN,  '버건디와 올리브의 크리스마스 어스톤 조합'),
+          mk('버건디+블랙',   'Burgundy & Black',BLK,  hex,  BLK,  BLK,  '버건디와 블랙의 미스터리한 다크 룩'),
+          mk('버건디+화이트', 'Burgundy & White',hex,  WHT,  CHAR, hex,  '버건디와 화이트의 강렬한 대비 코디'),
+        ];
+        // ── 올리브 · 아미그린 ─────────────────────────────────────────
+        if (H >= 60 && H <= 110 && S >= 18 && S < 65 && !isLight) return [
+          mk('올리브+크림',   'Olive & Cream',  hex,  CRM,  BGE,  CML,  '올리브와 크림의 내추럴한 어스톤 룩'),
+          mk('올리브+블랙',   'Olive & Black',  BLK,  hex,  BLK,  BLK,  '올리브와 블랙의 밀리터리 스트리트 룩'),
+          mk('올리브+버건디', 'Olive & Burgundy',hex, CRM,  BRG,  BRN,  '올리브와 버건디의 따뜻하고 리치한 가을 조합'),
+          mk('올리브+화이트', 'Olive & White',  hex,  WHT,  CHAR, CML,  '올리브와 화이트의 클린하고 내추럴한 조합'),
+          mk('올리브+카멜',   'Olive & Camel',  hex,  BGE,  BRN,  CML,  '올리브와 카멜의 따뜻한 어스톤 조합'),
+          mk('올리브+머스타드','Olive & Mustard',hex,  MST,  CHAR, BRN,  '올리브와 머스타드의 대담한 어스톤 코디'),
+        ];
+        // ── 카멜 · 탄 · 브라운 ──────────────────────────────────────
+        if (H >= 20 && H <= 50 && S >= 20 && S < 70 && !isLight && !isVibrant) return [
+          mk('카멜+화이트',   'Camel & White',  hex,  WHT,  BLK,  hex,  '카멜과 화이트의 우아한 클래식 조합'),
+          mk('카멜+블랙',     'Camel & Black',  BLK,  hex,  BLK,  hex,  '카멜과 블랙의 시크하고 세련된 조합'),
+          mk('카멜 토널',     'Camel Tonal',    hex,  CRM,  BGE,  WHT,  '카멜 계열의 따뜻한 어스톤 톤온톤'),
+          mk('카멜+버건디',   'Camel & Burgundy',hex, IVR,  BRG,  BRN,  '카멜과 버건디의 가을 리치 조합'),
+          mk('카멜+올리브',   'Camel & Olive',  OLV,  BGE,  hex,  BRN,  '카멜과 올리브의 내추럴한 어스톤 조합'),
+          mk('카멜+네이비',   'Camel & Navy',   NVY,  hex,  CHAR, CML,  '카멜과 네이비의 프레피 클래식 조합'),
+        ];
+        // ── 틸 · 터쿼이즈 ────────────────────────────────────────────
+        if (H >= 158 && H <= 200 && S > 28) return [
+          mk('틸+화이트',     'Teal & White',   hex,  WHT,  CHAR, WHT,  '틸과 화이트의 청량한 컬러 조합'),
+          mk('틸+네이비',     'Teal & Navy',    NVY,  hex,  CHAR, BLK,  '틸과 네이비의 오션 블루 계열 조합'),
+          mk('틸+골드',       'Teal & Gold',    hex,  MST,  CHAR, BRN,  '틸과 골드의 대담하고 럭셔리한 조합'),
+          mk('틸+크림',       'Teal & Cream',   hex,  CRM,  BGE,  CML,  '틸과 크림의 내추럴하고 감성적인 조합'),
+          mk('틸+오렌지 보색','Teal & Orange',  hex,  hslToHex(25,85,55), CHAR, CML, '틸과 오렌지의 보색 대비 코디'),
+          mk('틸+블랙',       'Teal & Black',   BLK,  hex,  BLK,  BLK,  '틸과 블랙의 시크하고 임팩트 있는 룩'),
+        ];
+        // ── 레드 · 오렌지 · 옐로우 (웜 비비드) ──────────────────────
+        if (isVibrant && (H < 70 || H > 300)) return [
+          mk('포인트+블랙',   'Statement Black', BLK,  hex,  BLK,  BLK,  '강렬한 컬러에 블랙 베이스를 더한 포인트 룩'),
+          mk('포인트+화이트', 'Statement White', WHT,  hex,  WHT,  WHT,  '밝은 포인트 컬러에 화이트 베이스 룩'),
+          mk('포인트+네이비', 'Statement Navy',  NVY,  hex,  NVY,  BLK,  '강렬한 컬러와 네이비의 대비 조합'),
+          mk('포인트+데님',   'Statement Denim', hslToHex(210,40,40), hex, hslToHex(210,45,32), WHT, '포인트 컬러와 데님의 캐주얼 조합'),
+          mk('포인트+뉴트럴', 'Statement Neutral',CML, hex,  BGE,  CML,  '포인트 컬러와 뉴트럴의 균형잡힌 룩'),
+          mk('보색 블로킹',   'Comp. Blocking',  hslToHex(compH,Math.max(S-10,20),Math.max(L-10,20)), hex, hslToHex(compH,S,L), WHT, '보색을 활용한 볼드한 컬러블로킹 룩'),
+        ];
+        // ── 그린 (논올리브 · 논틸) ──────────────────────────────────
+        if (H >= 100 && H < 158 && S >= 28) return [
+          mk('그린+화이트',   'Green & White',  hex,  WHT,  CHAR, WHT,  '그린과 화이트의 프레시한 컬러 조합'),
+          mk('그린+크림',     'Green & Cream',  hex,  CRM,  CHAR, CML,  '그린과 크림의 내추럴하고 감성적인 조합'),
+          mk('그린+블랙',     'Green & Black',  BLK,  hex,  BLK,  BLK,  '그린과 블랙의 시크한 스트리트 룩'),
+          mk('그린+베이지',   'Green & Beige',  hex,  BGE,  CHAR, CML,  '그린과 베이지의 내추럴하고 세련된 조합'),
+          mk('그린+버건디',   'Green & Burgundy',BRG, hex,  CHAR, BRN,  '그린과 버건디의 크리스마스 대비 조합'),
+          mk('그린+골드',     'Green & Gold',   hex,  MST,  CHAR, BRN,  '그린과 골드의 고급스러운 포레스트 조합'),
+        ];
+        // ── 퍼플 · 라벤더 ─────────────────────────────────────────
+        if (H >= 255 && H <= 310 && S >= 20) return [
+          mk('퍼플+화이트',   'Purple & White', hex,  WHT,  CHAR, WHT,  '퍼플과 화이트의 고급스럽고 로맨틱한 조합'),
+          mk('퍼플+블랙',     'Purple & Black', BLK,  hex,  BLK,  BLK,  '퍼플과 블랙의 미스터리하고 세련된 룩'),
+          mk('퍼플+크림',     'Purple & Cream', hex,  CRM,  CHAR, CML,  '퍼플과 크림의 로맨틱하고 감성적인 조합'),
+          mk('퍼플+그레이',   'Purple & Grey',  CHAR, hex,  CHAR, BLK,  '퍼플과 그레이의 모던하고 세련된 조합'),
+          mk('퍼플+골드',     'Purple & Gold',  hex,  MST,  CHAR, BRN,  '퍼플과 골드의 로열하고 럭셔리한 조합'),
+          mk('퍼플+블루',     'Purple & Blue',  NVY,  hex,  hslToHex(220,55,40), BLK, '퍼플과 블루의 쿨톤 레이어드 조합'),
+        ];
+        // ── 블루 (논네이비) ───────────────────────────────────────
+        if (H >= 195 && H <= 255 && S >= 20) return [
+          mk('블루+화이트',   'Blue & White',   hex,  WHT,  CHAR, WHT,  '블루와 화이트의 클린하고 청량한 조합'),
+          mk('블루 토널',     'Blue Tonal',     hslToHex(H,S,Math.max(L-20,15)), hex, hslToHex(H,S,Math.max(L-30,10)), WHT, '블루 계열의 다양한 쉐이드 레이어드'),
+          mk('블루+크림',     'Blue & Cream',   hex,  CRM,  CHAR, CML,  '블루와 크림의 감성적인 쿨-웜 조합'),
+          mk('블루+오렌지',   'Blue & Orange',  hslToHex(25,80,55), hex, CHAR, CML, '블루와 오렌지의 보색 대비 코디'),
+          mk('블루+그레이',   'Blue & Grey',    CHAR, hex,  BLK,  WHT,  '블루와 그레이의 스마트하고 세련된 조합'),
+          mk('블루+블랙',     'Blue & Black',   BLK,  hex,  BLK,  BLK,  '블루와 블랙의 임팩트 있는 다크 조합'),
+        ];
+        // ── 핑크 · 로즈 ──────────────────────────────────────────
+        if (H >= 310 && H < 350 && S >= 18) return [
+          mk('핑크+화이트',   'Pink & White',   hex,  WHT,  WHT,  WHT,  '핑크와 화이트의 로맨틱하고 페미닌한 룩'),
+          mk('핑크+블랙',     'Pink & Black',   BLK,  hex,  BLK,  BLK,  '핑크와 블랙의 대담하고 트렌디한 조합'),
+          mk('핑크+네이비',   'Pink & Navy',    NVY,  hex,  NVY,  BLK,  '핑크와 네이비의 프레피하고 귀여운 조합'),
+          mk('핑크+그레이',   'Pink & Grey',    CHAR, hex,  CHAR, BLK,  '핑크와 그레이의 세련된 모던 페미닌 룩'),
+          mk('핑크+카멜',     'Pink & Camel',   CML,  hex,  BGE,  BRN,  '핑크와 카멜의 따뜻하고 감성적인 어스톤'),
+          mk('핑크+민트',     'Pink & Mint',    hslToHex(160,35,72), hex, hslToHex(150,30,65), WHT, '핑크와 민트의 파스텔 컬러블로킹'),
+        ];
+        // ── 뮤트 · 기타 ───────────────────────────────────────────
+        if (isMuted) return [
+          mk('뮤트+크림',     'Muted & Cream',  hex,  CRM,  BGE,  CML,  '뮤트 컬러와 크림의 내추럴한 어스톤 조합'),
+          mk('뮤트+블랙',     'Muted & Black',  BLK,  hex,  CHAR, BLK,  '뮤트 컬러와 블랙의 시크하고 세련된 조합'),
+          mk('뮤트+화이트',   'Muted & White',  hex,  WHT,  CHAR, WHT,  '뮤트 컬러와 화이트의 클린한 조합'),
+          mk('뮤트+네이비',   'Muted & Navy',   NVY,  hex,  CHAR, BLK,  '뮤트 컬러와 네이비의 스마트한 조합'),
+          mk('뮤트+카멜',     'Muted & Camel',  CML,  hex,  BGE,  BRN,  '뮤트 컬러와 카멜의 따뜻한 어스톤'),
+          mk('뮤트 토널',     'Muted Tonal',    hslToHex(H,Math.max(S-5,5),Math.max(L-20,5)), hex, hslToHex(H,Math.max(S-10,5),Math.max(L-10,5)), CML, '뮤트 컬러 계열의 자연스러운 톤온톤 조합'),
+        ];
+        // ── 범용 폴백 ──────────────────────────────────────────────
+        return [
+          mk('포인트+블랙',   'Statement Black', BLK,  hex,  BLK,  BLK,  '강렬한 컬러에 블랙 베이스를 더한 포인트 룩'),
+          mk('뉴트럴 베이스', 'Neutral Base',   CHAR, hex,  BLK,  CML,  '뉴트럴 컬러를 베이스로 한 안정적인 조합'),
+          mk('컬러+화이트',   'Color & White',  hex,  WHT,  CHAR, WHT,  '선택한 컬러와 화이트의 클린한 조합'),
+          mk('보색 포인트',   'Complementary',  hslToHex(H,S,Math.max(L-20,10)), hex, hslToHex(compH,S,L), WHT, '보색을 포인트로 활용한 강렬한 코디'),
+          mk('유사색 레이어드','Analogous',      hslToHex((H-30+360)%360,Math.max(S-5,10),Math.max(L-15,10)), hex, hslToHex((H+30)%360,Math.max(S-8,10),Math.max(L-8,10)), CML, '인접한 유사색의 자연스러운 레이어드'),
+        ];
+      };
+
+      // ── 톤온톤 · 톤인톤 (항상 추가) ──────────────────────────────
+      const tonalCombos = [
+        mk('톤온톤 ①', 'Tone-on-Tone ①',
+          hslToHex(H, Math.max(S-5,8),  Math.min(L+32, 87)),
+          hex,
+          hslToHex(H, Math.min(S+8,90), Math.max(L-24, 5)),
+          snapShoeColor(hslToHex(H, Math.max(S-22,3), Math.min(L+46, 93))),
+          '같은 색상의 밝은 톤~어두운 톤으로 완성하는 톤온톤 배색'
+        ),
+        mk('톤온톤 ②', 'Tone-on-Tone ②',
+          hslToHex(H, Math.min(S+10,92), Math.max(L-26, 5)),
+          hex,
+          hslToHex(H, Math.max(S-6, 8),  Math.min(L+16, 84)),
+          snapShoeColor(hslToHex(H, Math.max(S-26,3), Math.max(L-4,  8))),
+          '딥 톤과 미드 톤의 조화로 완성하는 다크 톤온톤 배색'
+        ),
+        mk('톤인톤 ①', 'Tone-in-Tone ①',
+          hslToHex((H+22)%360, Math.max(S-8, 10), Math.max(L-8, 8)),
+          hex,
+          hslToHex((H-22+360)%360, Math.max(S-10,10), Math.max(L-10, 8)),
+          snapShoeColor(hslToHex(30, 18, 73)),
+          '인접 색상을 같은 채도·명도 대역으로 맞춘 톤인톤 배색'
+        ),
+        mk('톤인톤 ②', 'Tone-in-Tone ②',
+          hslToHex((H+35)%360, Math.max(S-15,8), Math.min(L+12, 82)),
+          hex,
+          hslToHex((H-35+360)%360, Math.max(S-18,8), Math.min(L+8, 80)),
+          snapShoeColor(hslToHex(33, 20, 80)),
+          '폭넓은 유사색 영역을 활용한 감성적인 톤인톤 배색'
+        ),
+      ];
+
+      return [...getBase(), ...tonalCombos];
+    }
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function ColorChip({ hex, label, onClick, className = '' }) {
+      const [showTooltip, setShowTooltip] = useState(false);
+      const [copied, setCopied] = useState(false);
+      const textColor = getTextColor(hex);
+
+      const handleClick = () => {
+        navigator.clipboard.writeText(hex).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 800);
+        }).catch(() => {});
+        if (onClick) onClick(hex);
+      };
+
+      return (
+        <div className={`flex flex-col items-center gap-1 ${className}`}>
+          <div className="relative">
+            <button
+              onClick={handleClick}
+              onMouseEnter={() => setShowTooltip(true)}
+              onMouseLeave={() => setShowTooltip(false)}
+              className="w-11 h-11 rounded-lg border border-black/10 cursor-pointer transition-transform hover:scale-110 active:scale-95 shadow-sm"
+              style={{ backgroundColor: hex }}
+              title={hex}
+              aria-label={`${label} 색상 ${hex} 복사`}
+            />
+            {showTooltip && (
+              <span
+                className="absolute -top-7 left-1/2 -translate-x-1/2 text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-900 text-white whitespace-nowrap z-10 pointer-events-none"
+              >
+                {hex}
+              </span>
+            )}
+            {copied && (
+              <span className="copied-toast absolute -top-7 left-1/2 -translate-x-1/2 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-600 text-white whitespace-nowrap z-20 pointer-events-none">
+                복사됨
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] text-gray-500 font-medium">{label}</span>
+        </div>
+      );
+    }
+
+    function CombinationCard({ combo, activeItem }) {
+      const [copiedHex, setCopiedHex] = useState(null);
+      const items = [
+        { key: 'outer', label: '외투', hex: combo.outer },
+        { key: 'top',   label: '상의', hex: combo.top },
+        { key: 'bottom',label: '하의', hex: combo.bottom },
+        { key: 'shoes', label: '신발', hex: combo.shoes },
+      ];
+      const handleChipClick = (hex) => {
+        navigator.clipboard.writeText(hex).catch(() => {});
+        setCopiedHex(hex);
+        setTimeout(() => setCopiedHex(null), 800);
+      };
+      return (
+        <div className="bg-white/70 backdrop-blur-sm rounded-xl border border-white/80 p-3 hover:shadow-md transition-all">
+          <div className="flex items-center gap-1.5 mb-2">
+            <h3 className="text-[11px] font-semibold text-gray-800">{combo.name}</h3>
+            <span className="text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{combo.eng}</span>
+          </div>
+          <div className="flex gap-1 mb-1.5">
+            {items.map(({ key, hex }) => (
+              <button
+                key={key}
+                onClick={() => handleChipClick(hex)}
+                className="flex-1 h-8 rounded-sm relative transition-transform hover:scale-y-110 origin-bottom"
+                style={{
+                  backgroundColor: hex,
+                  border: key === activeItem ? '2px solid #CC0000' : '1px solid rgba(0,0,0,0.08)',
+                }}
+                title={hex}
+              >
+                {copiedHex === hex && (
+                  <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold"
+                    style={{ color: getTextColor(hex) }}>복사</span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1 mb-2">
+            {items.map(({ key, label }) => (
+              <div key={key} className="flex-1 text-center text-[8px] text-gray-400">{label}</div>
+            ))}
+          </div>
+          <p className="text-[9px] text-gray-400 leading-tight">{combo.desc}</p>
+        </div>
+      );
+    }
+
+    function PresetSwatch({ hex, name, isSelected, onClick }) {
+      const borderColor = hex === '#F5F5F5' || hex === '#FFFFF0' || hex === '#FFFDD0'
+        ? 'border-gray-300' : 'border-transparent';
+
+      return (
+        <button
+          onClick={() => onClick(hex)}
+          className={`flex-shrink-0 flex flex-col items-center gap-1 group`}
+          title={`${name} (${hex})`}
+          aria-label={`${name} 색상 선택`}
+        >
+          <div
+            className={`w-8 h-8 rounded-full border-2 transition-all ${
+              isSelected
+                ? 'ring-2 ring-offset-2 ring-red-500 scale-110'
+                : `${borderColor} hover:scale-110`
+            }`}
+            style={{ backgroundColor: hex }}
+          />
+          <span className="text-[9px] text-gray-400 group-hover:text-gray-600 transition-colors whitespace-nowrap">
+            {name}
+          </span>
+        </button>
+      );
+    }
+
+    // ========================================
+    // Page Components
+    // ========================================
+    const ITEM_TABS = [
+      { id: 'outer', label: '외투' },
+      { id: 'top',   label: '상의' },
+      { id: 'bottom',label: '하의' },
+      { id: 'shoes', label: '신발' },
+    ];
+
+    function ColorPickerSection({ activeItem, setActiveItem, itemColors, onColorChange, lockedItems, toggleLock }) {
+      const baseColor = itemColors[activeItem] || '#1B3A5C';
+      const [hexInput, setHexInput] = useState(baseColor);
+      const colorInputRef = useRef(null);
+
+      useEffect(() => {
+        setHexInput(baseColor.toUpperCase());
+      }, [baseColor]);
+
+      const handleHexChange = (e) => {
+        const val = e.target.value;
+        setHexInput(val);
+        if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+          onColorChange(val.toUpperCase());
+        }
+      };
+
+      const handleNativeColorChange = (e) => {
+        onColorChange(e.target.value.toUpperCase());
+      };
+
+      return (
+        <section className="w-full max-w-2xl mx-auto px-4 pt-4">
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-white/60 p-5">
+            {/* Item tabs */}
+            <div className="flex gap-1 mb-5 bg-gray-50 p-1 rounded-lg">
+              {ITEM_TABS.map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => setActiveItem(id)}
+                  className={`flex-1 py-1.5 rounded-md text-[11px] font-medium transition-all flex flex-col items-center gap-1 ${
+                    activeItem === id
+                      ? 'bg-white shadow-sm text-gray-900'
+                      : 'text-gray-400 hover:text-gray-600'
+                  } ${lockedItems[id] ? 'ring-2 ring-red-400 ring-inset' : ''}`}
+                >
+                  <div className="flex items-center gap-0.5">
+                    <span>{label}</span>
+                    {itemColors[id] && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleLock(id); }}
+                        className={`ml-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] leading-none transition-colors ${
+                          lockedItems[id]
+                            ? 'bg-red-500 text-white'
+                            : 'bg-gray-200 text-gray-400 hover:bg-gray-300'
+                        }`}
+                        title={lockedItems[id] ? '고정 해제' : '이 색상 고정'}
+                      >
+                        {lockedItems[id] ? '●' : '○'}
+                      </button>
+                    )}
+                  </div>
+                  <span
+                    className="w-3 h-1.5 rounded-full"
+                    style={{
+                      backgroundColor: itemColors[id] || 'transparent',
+                      border: itemColors[id] ? 'none' : '1px dashed #d1d5db',
+                    }}
+                  />
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-4 mb-5">
+              <div className="relative">
+                <button
+                  onClick={() => colorInputRef.current?.click()}
+                  className="w-12 h-12 rounded-full border-2 border-gray-200 cursor-pointer shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+                  style={{ backgroundColor: baseColor }}
+                  aria-label="색상 선택기 열기"
+                />
+                <input
+                  ref={colorInputRef}
+                  type="color"
+                  value={baseColor}
+                  onChange={handleNativeColorChange}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-1 block">
+                  Hex Code
+                </label>
+                <input
+                  type="text"
+                  value={hexInput}
+                  onChange={handleHexChange}
+                  placeholder="#1B3A5C"
+                  maxLength={7}
+                  className="w-full text-sm font-mono font-medium border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="mb-2">
+              <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
+                뉴트럴
+              </span>
+            </div>
+            <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-3 mb-4">
+              {NEUTRAL_COLORS.map(c => (
+                <PresetSwatch
+                  key={c.hex}
+                  hex={c.hex}
+                  name={c.name}
+                  isSelected={baseColor.toUpperCase() === c.hex.toUpperCase()}
+                  onClick={onColorChange}
+                />
+              ))}
+            </div>
+
+            <div className="mb-2">
+              <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
+                컬러
+              </span>
+            </div>
+            <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-1">
+              {CHROMATIC_COLORS.map(c => (
+                <PresetSwatch
+                  key={c.hex}
+                  hex={c.hex}
+                  name={c.name}
+                  isSelected={baseColor.toUpperCase() === c.hex.toUpperCase()}
+                  onClick={onColorChange}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    function CuratedPalettesSection({ onSelectPalette, activePaletteName }) {
+      return (
+        <section className="w-full max-w-2xl mx-auto px-4 py-6">
+          <h2 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
+            <span className="w-1 h-4 bg-red-600 rounded-full inline-block"></span>
+            큐레이션 팔레트
+          </h2>
+          <p className="text-[11px] text-gray-400 mb-4">Pinterest 참고 실제 조합 · 클릭하면 코디에 적용</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {CURATED_PALETTES.map((p) => (
+              <button
+                key={p.name}
+                onClick={() => onSelectPalette(p)}
+                className={`bg-white/70 backdrop-blur-sm rounded-xl border p-3 text-left hover:shadow-md transition-all ${
+                  activePaletteName === p.name
+                    ? 'border-red-500 shadow-md ring-1 ring-red-500/30'
+                    : 'border-white/80 hover:border-white'
+                }`}
+              >
+                <p className="text-[11px] font-semibold text-gray-800 mb-2 leading-tight">{p.name}</p>
+                <div className="flex gap-1 mb-2">
+                  {[p.outer, p.top, p.bottom, p.shoes].map((hex, i) => (
+                    <div
+                      key={i}
+                      className="flex-1 h-6 rounded-sm"
+                      style={{ backgroundColor: hex, border: '1px solid rgba(0,0,0,0.08)' }}
+                    />
+                  ))}
+                </div>
+                <p className="text-[9px] text-gray-400 leading-tight">{p.desc}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    function generateEasyCombos(activeItem, hex, lockedColors = {}) {
+      const BLK = '#1A1A1A', CHAR = '#36454F', LGRY = '#708090';
+      const WHT = '#F5F5F5', IVR = '#FFFFF0', CRM = '#FFFDD0';
+      const BGE = '#E8D5B7', CML = '#C19A6B', BRN = '#8B6914';
+      const NVY = '#1B3A5C', OLV = '#6B7B3A';
+
+      const fix = (item, generated) => {
+        if (item === activeItem) return hex.toUpperCase();
+        if (lockedColors[item]) return lockedColors[item].toUpperCase();
+        return generated;
+      };
+      const mk = (name, outer, top, bottom, shoes, desc) => ({
+        name, desc,
+        outer: fix('outer', outer),
+        top:   fix('top',   top),
+        bottom:fix('bottom',bottom),
+        shoes: snapShoeColor(fix('shoes', shoes)),
+      });
+
+      return [
+        mk('블랙 베이스',   BLK,  BLK,  BLK,  BLK,  '블랙으로 통일하는 시크한 올블랙'),
+        mk('화이트+블랙',   WHT,  WHT,  BLK,  BLK,  '화이트와 블랙의 타임리스 조합'),
+        mk('그레이+블랙',   CHAR, LGRY, BLK,  BLK,  '그레이와 블랙의 스마트한 배색'),
+        mk('네이비+베이지', NVY,  BGE,  CHAR, CML,  '네이비와 베이지의 클래식 배색'),
+        mk('올리브+크림',   OLV,  CRM,  BRN,  CML,  '올리브와 크림의 내추럴 어스톤'),
+        mk('베이지 토널',   CML,  BGE,  BRN,  CML,  '베이지 계열의 따뜻한 톤온톤'),
+      ];
+    }
+
+    function EasyComboSection({ combos }) {
+      return (
+        <section className="w-full max-w-2xl mx-auto px-4 py-6">
+          <h2 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
+            <span className="w-1 h-4 bg-blue-400 rounded-full inline-block"></span>
+            쉬운 코디 조합
+          </h2>
+          <p className="text-[11px] text-gray-400 mb-4">무채색 + 베이직 컬러 · 선택한 색상이 반영됩니다</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {combos.map((combo) => (
+              <div key={combo.name} className="bg-white/70 backdrop-blur-sm rounded-xl border border-white/80 p-3 hover:shadow-md transition-all">
+                <p className="text-[11px] font-semibold text-gray-800 mb-2 leading-tight">{combo.name}</p>
+                <div className="flex gap-1 mb-1.5">
+                  {[combo.outer, combo.top, combo.bottom, combo.shoes].map((c, i) => (
+                    <div key={i} className="flex-1 h-8 rounded-sm"
+                      style={{ backgroundColor: c, border: '1px solid rgba(0,0,0,0.08)' }} />
+                  ))}
+                </div>
+                <div className="flex gap-1 mb-2">
+                  {['외투','상의','하의','신발'].map((label, i) => (
+                    <div key={i} className="flex-1 text-center text-[8px] text-gray-400">{label}</div>
+                  ))}
+                </div>
+                <p className="text-[9px] text-gray-400 leading-tight">{combo.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    function CombinationsGrid({ activeItem, baseColor, selectedPalette, lockedColors }) {
+      const combos = useMemo(() => generateCombinations(activeItem, baseColor, lockedColors), [activeItem, baseColor, lockedColors]);
+      const palItems = selectedPalette
+        ? [
+            { key: 'outer', label: '외투', hex: selectedPalette.outer },
+            { key: 'top',   label: '상의', hex: selectedPalette.top },
+            { key: 'bottom',label: '하의', hex: selectedPalette.bottom },
+            { key: 'shoes', label: '신발', hex: selectedPalette.shoes },
+          ]
+        : null;
+
+      return (
+        <section className="w-full max-w-2xl mx-auto px-4 py-6 pb-12">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <span className="w-1 h-4 bg-red-600 rounded-full inline-block"></span>
+            추천 코디 조합
+          </h2>
+          {selectedPalette && (
+            <div className="mb-4 bg-white rounded-xl border border-red-200 p-3 ring-1 ring-red-500/20">
+              <div className="flex items-center gap-1.5 mb-2">
+                <h3 className="text-[11px] font-semibold text-gray-800">{selectedPalette.name}</h3>
+                <span className="text-[9px] font-medium text-red-500 bg-red-50 px-1.5 py-0.5 rounded">Pinterest</span>
+              </div>
+              <div className="flex gap-1 mb-1.5">
+                {palItems.map(({ key, hex }) => (
+                  <div key={key} className="flex-1 h-8 rounded-sm"
+                    style={{ backgroundColor: hex, border: '1px solid rgba(0,0,0,0.08)' }} />
+                ))}
+              </div>
+              <div className="flex gap-1 mb-2">
+                {palItems.map(({ key, label }) => (
+                  <div key={key} className="flex-1 text-center text-[8px] text-gray-400">{label}</div>
+                ))}
+              </div>
+              <p className="text-[9px] text-gray-400 leading-tight">{selectedPalette.desc}</p>
+            </div>
+          )}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {combos.map((combo, i) => (
+              <CombinationCard key={i} combo={combo} activeItem={activeItem} />
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const [activeItem, setActiveItem] = useState('top');
+      const [itemColors, setItemColors] = useState({ outer: null, top: '#1B3A5C', bottom: null, shoes: null });
+      const [lockedItems, setLockedItems] = useState({ outer: false, top: false, bottom: false, shoes: false });
+      const [selectedPalette, setSelectedPalette] = useState(null);
+
+      const baseColor = itemColors[activeItem] || '#1B3A5C';
+
+      const lockedColors = useMemo(() => {
+        const result = {};
+        Object.entries(lockedItems).forEach(([k, locked]) => {
+          if (locked && itemColors[k]) result[k] = itemColors[k];
+        });
+        return result;
+      }, [lockedItems, itemColors]);
+
+      const handleColorChange = useCallback((hex) => {
+        setItemColors(prev => ({ ...prev, [activeItem]: hex.toUpperCase() }));
+        setSelectedPalette(null);
+      }, [activeItem]);
+
+      const handleSelectPalette = useCallback((palette) => {
+        setSelectedPalette(palette);
+        setItemColors({
+          outer: palette.outer.toUpperCase(),
+          top:   palette.top.toUpperCase(),
+          bottom:palette.bottom.toUpperCase(),
+          shoes: palette.shoes.toUpperCase(),
+        });
+        setLockedItems({ outer: false, top: false, bottom: false, shoes: false });
+        setActiveItem('outer');
+      }, []);
+
+      const toggleLock = useCallback((id) => {
+        setLockedItems(prev => ({ ...prev, [id]: !prev[id] }));
+      }, []);
+
+      const handleReset = useCallback(() => {
+        setItemColors({ outer: null, top: '#1B3A5C', bottom: null, shoes: null });
+        setLockedItems({ outer: false, top: false, bottom: false, shoes: false });
+        setSelectedPalette(null);
+        setActiveItem('top');
+      }, []);
+
+      const easyCombos = useMemo(
+        () => generateEasyCombos(activeItem, baseColor, lockedColors),
+        [activeItem, baseColor, lockedColors]
+      );
+
+      const paintColors = useMemo(() => {
+        const locked = Object.values(lockedColors).filter(Boolean);
+        return locked.length ? locked : [baseColor];
+      }, [lockedColors, baseColor]);
+
+      return (
+        <>
+          <PaintCanvas colors={paintColors} />
+          <div className="min-h-screen" style={{ position: 'relative', zIndex: 1 }}>
+          {/* Header */}
+          <header className="w-full bg-white/70 backdrop-blur-sm border-b border-white/50 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+            <div className="w-12"></div>
+            <div className="text-center">
+              <h1 className="text-base font-bold text-gray-900 tracking-tight">
+                Color Studio
+              </h1>
+              <p className="text-[10px] text-gray-400 font-medium tracking-wider uppercase">
+                실패없는 컬러 코디
+              </p>
+            </div>
+            <button
+              onClick={handleReset}
+              className="text-[10px] text-gray-400 hover:text-gray-700 border border-gray-300 hover:border-gray-500 bg-white/60 rounded-md px-2 py-1 transition-colors w-12"
+            >
+              초기화
+            </button>
+          </header>
+
+          {/* Color Picker */}
+          <ColorPickerSection
+            activeItem={activeItem}
+            setActiveItem={setActiveItem}
+            itemColors={itemColors}
+            onColorChange={handleColorChange}
+            lockedItems={lockedItems}
+            toggleLock={toggleLock}
+          />
+
+          {/* Easy Combos */}
+          <EasyComboSection combos={easyCombos} />
+
+          {/* Combinations */}
+          <CombinationsGrid
+            activeItem={activeItem}
+            baseColor={baseColor}
+            selectedPalette={selectedPalette}
+            lockedColors={lockedColors}
+          />
+
+          {/* Curated Palettes */}
+          <CuratedPalettesSection
+            onSelectPalette={handleSelectPalette}
+            activePaletteName={selectedPalette?.name}
+          />
+          </div>
+        </>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

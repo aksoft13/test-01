@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>세금 계산기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:            #F2F1EE;
+      --surface:       #FAFAF8;
+      --border:        #D4D3CE;
+      --border-strong: #A8A7A2;
+      --text:          #1A1916;
+      --muted:         #7A7974;
+      --subtle:        #C0BFB9;
+      --accent:        #FFCD00;
+      --accent-text:   #1A1916;
+      --positive:      #1A5C2A;
+      --positive-bg:   #EAF4EC;
+      --negative:      #C0392B;
+      --negative-bg:   #FCECEA;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: -0.01em;
+      font-size: 14px;
+    }
+
+    .mono { font-family: 'DM Mono', monospace; }
+
+    /* ── Label ── */
+    .label {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* ── Field ── */
+    .field {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.12s;
+      border-radius: 0;
+      -webkit-appearance: none;
+    }
+    .field:focus { border-color: var(--text); }
+    .field::placeholder { color: var(--subtle); }
+    .field:disabled { opacity: 0.3; background: var(--bg); cursor: not-allowed; }
+    select.field { cursor: pointer; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: inherit; font-size: 11px; font-weight: 500;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      cursor: pointer; border: 1px solid transparent; outline: none;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+      border-radius: 0; padding: 9px 16px; white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-primary  { background: var(--text); color: #FAFAF8; border-color: var(--text); }
+    .btn-primary:not(:disabled):hover { background: #2E2D2A; }
+    .btn-ghost    { background: transparent; color: var(--muted); border-color: var(--border); }
+    .btn-ghost:not(:disabled):hover { border-color: var(--border-strong); color: var(--text); }
+
+    /* ── Tab ── */
+    .tabs { display: flex; border-bottom: 1px solid var(--border); }
+    .tab {
+      padding: 14px 24px;
+      font-size: 11px; font-weight: 500; letter-spacing: 0.10em; text-transform: uppercase;
+      cursor: pointer; border: none; background: transparent; color: var(--muted);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: color 0.12s, border-color 0.12s; outline: none;
+    }
+    .tab.active { color: var(--text); border-bottom-color: var(--text); }
+    .tab:not(.active):hover { color: var(--text); }
+
+    /* ── Toggle group ── */
+    .toggle-group { display: flex; border: 1px solid var(--border); }
+    .toggle-btn {
+      flex: 1; padding: 8px 10px;
+      font-family: inherit; font-size: 11px; font-weight: 500;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      cursor: pointer; background: transparent; color: var(--muted);
+      border: none; border-right: 1px solid var(--border);
+      transition: background 0.12s, color 0.12s; outline: none;
+    }
+    .toggle-btn:last-child { border-right: none; }
+    .toggle-btn.active { background: var(--text); color: #FAFAF8; }
+    .toggle-btn:not(.active):hover { background: var(--bg); color: var(--text); }
+
+    /* ── Section ── */
+    .section { background: var(--surface); border: 1px solid var(--border); }
+    .section + .section { border-top: none; }
+    .section-header {
+      padding: 13px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .section-title { font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+    .section-body { padding: 20px; }
+
+    /* ── Grid helpers ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+    /* ── Result bar ── */
+    .result-bar { background: var(--text); color: #FAFAF8; padding: 20px 24px; }
+    .result-amount { font-family: 'DM Mono', monospace; font-size: 30px; font-weight: 500; letter-spacing: -0.03em; }
+    .result-label-sm { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #AAAAAA; margin-bottom: 4px; }
+
+    /* ── Breakdown row ── */
+    .brow { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--border); }
+    .brow:last-child { border-bottom: none; }
+    .brow-label { font-size: 13px; color: var(--text); }
+    .brow-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .brow-value { font-family: 'DM Mono', monospace; font-size: 13px; }
+    .brow-value.deduct { color: var(--positive); }
+    .brow-value.tax { color: var(--negative); }
+    .brow-value.accent { color: var(--text); font-weight: 500; }
+
+    /* ── Rate band ── */
+    .rate-band { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .rate-band:last-child { border-bottom: none; }
+    .rate-pill { font-family: 'DM Mono', monospace; font-size: 11px; padding: 2px 7px; background: var(--accent); color: var(--accent-text); min-width: 36px; text-align: center; }
+    .rate-pill.active { background: var(--text); color: #FAFAF8; }
+
+    /* ── Tag ── */
+    .positive-tag { background: var(--positive-bg); color: var(--positive); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; }
+    .negative-tag { background: var(--negative-bg); color: var(--negative); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; }
+
+    /* ── Checkbox ── */
+    .chk-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .chk-wrap input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--text); border-radius: 0; }
+    .chk-label { font-size: 13px; }
+
+    /* ── Divider ── */
+    hr.div { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+    /* ── Number input prefix wrap ── */
+    .input-wrap { position: relative; }
+    .input-wrap .prefix {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      color: var(--muted); font-size: 13px; pointer-events: none;
+    }
+    .input-wrap .field { padding-left: 26px; font-family: 'DM Mono', monospace; text-align: right; letter-spacing: 0; }
+
+    /* ── Info note ── */
+    .note { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    // ── Formatter ───────────────────────────────────────────
+    const fmt     = n => '₩\u202F' + Math.round(n).toLocaleString('ko-KR');
+    const pct     = n => (n * 100).toFixed(2) + '%';
+    const num     = s => parseFloat(String(s).replace(/,/g, '')) || 0;
+    const commafy = v => {
+      const digits = String(v).replace(/[^\d]/g, '');
+      if (!digits) return '';
+      return parseInt(digits, 10).toLocaleString('ko-KR');
+    };
+
+    // ════════════════════════════════════════════════════════
+    // 1. 종합소득세 (Comprehensive Income Tax)
+    // ════════════════════════════════════════════════════════
+
+    // 2024 세율 구간
+    const INCOME_BRACKETS = [
+      { limit: 14_000_000,   rate: 0.06, deduction: 0 },
+      { limit: 50_000_000,   rate: 0.15, deduction: 1_260_000 },
+      { limit: 88_000_000,   rate: 0.24, deduction: 5_220_000 },
+      { limit: 150_000_000,  rate: 0.35, deduction: 14_900_000 },
+      { limit: 300_000_000,  rate: 0.38, deduction: 19_400_000 },
+      { limit: 500_000_000,  rate: 0.40, deduction: 25_400_000 },
+      { limit: 1_000_000_000,rate: 0.42, deduction: 35_400_000 },
+      { limit: Infinity,     rate: 0.45, deduction: 65_400_000 },
+    ];
+
+    // 근로소득공제
+    function calcLaborDeduction(income) {
+      if (income <= 5_000_000)        return income;
+      if (income <= 15_000_000)       return 5_000_000 + (income - 5_000_000) * 0.5;
+      if (income <= 45_000_000)       return 10_000_000 + (income - 15_000_000) * 0.15;
+      if (income <= 100_000_000)      return 14_750_000 + (income - 45_000_000) * 0.05;
+      return Math.min(17_500_000, 17_500_000);
+    }
+
+    // 세율 구간 찾기
+    function findBracket(taxableIncome) {
+      return INCOME_BRACKETS.find(b => taxableIncome <= b.limit) || INCOME_BRACKETS[INCOME_BRACKETS.length - 1];
+    }
+
+    function calcIncomeTax(taxableIncome) {
+      if (taxableIncome <= 0) return 0;
+      const b = findBracket(taxableIncome);
+      return Math.max(0, taxableIncome * b.rate - b.deduction);
+    }
+
+    function IncomeTaxCalc() {
+      const [incomeType, setIncomeType] = useState('labor');   // labor | business | freelance
+      const [income,     setIncome]     = useState('');
+      const [other,      setOther]      = useState('');        // 기타소득
+
+      // 인적공제
+      const [self,       setSelf]       = useState(true);
+      const [spouse,     setSpouse]     = useState(false);
+      const [dependents, setDependents] = useState(0);
+      const [elderly,    setElderly]    = useState(0);         // 경로우대
+      const [disabled,   setDisabled]   = useState(0);         // 장애인
+
+      // 소득공제
+      const [pensionContrib, setPensionContrib] = useState(''); // 국민연금
+      const [insurance,      setInsurance]      = useState(''); // 건강보험료
+      const [mortgage,       setMortgage]       = useState(''); // 주택담보대출이자
+      const [donation,       setDonation]       = useState(''); // 기부금
+
+      // 세액공제
+      const [childCredit,  setChildCredit]  = useState(0);     // 자녀세액공제
+      const [eduCredit,    setEduCredit]    = useState('');     // 교육비
+      const [medCredit,    setMedCredit]    = useState('');     // 의료비
+
+      const result = useMemo(() => {
+        const baseIncome  = num(income);
+        const otherIncome = num(other);
+        const totalGross  = baseIncome + otherIncome;
+        if (totalGross <= 0) return null;
+
+        // 1. 소득공제
+        let laborDed = 0;
+        let expenseRate = 0;
+        if (incomeType === 'labor') {
+          laborDed = calcLaborDeduction(baseIncome);
+        } else if (incomeType === 'business') {
+          expenseRate = 0; // 사용자 입력 경비 없으면 0
+        } else if (incomeType === 'freelance') {
+          laborDed = baseIncome * 0.60; // 기타소득 필요경비 60%
+        }
+
+        const pension    = Math.min(num(pensionContrib), 9_000_000);
+        const ins        = num(insurance);
+        const mortgageD  = Math.min(num(mortgage), 3_000_000);
+        const donationD  = num(donation);
+
+        // 인적공제
+        const selfD      = self ? 1_500_000 : 0;
+        const spouseD    = spouse ? 1_500_000 : 0;
+        const depD       = dependents * 1_500_000;
+        const elderlyD   = elderly * 1_000_000;
+        const disabledD  = disabled * 2_000_000;
+        const personalD  = selfD + spouseD + depD + elderlyD + disabledD;
+
+        const totalDed   = laborDed + pension + ins + mortgageD + donationD + personalD;
+        const taxableInc = Math.max(0, totalGross - totalDed);
+
+        // 2. 산출세액
+        const calcTax    = calcIncomeTax(taxableInc);
+
+        // 3. 세액공제
+        const childTaxC  = childCredit === 1 ? 150_000
+                         : childCredit === 2 ? 350_000
+                         : childCredit >= 3  ? 350_000 + (childCredit - 2) * 300_000 : 0;
+        const eduTaxC    = Math.min(num(eduCredit) * 0.15, 9_000_000);
+        const medD       = num(medCredit);
+        const medTaxC    = medD > totalGross * 0.03 ? (medD - totalGross * 0.03) * 0.15 : 0;
+        const totalTaxC  = childTaxC + eduTaxC + medTaxC;
+
+        const incomeTax  = Math.max(0, calcTax - totalTaxC);
+        const localTax   = incomeTax * 0.10;
+        const totalTax   = incomeTax + localTax;
+        const bracket    = findBracket(taxableInc);
+        const effectiveRate = totalGross > 0 ? totalTax / totalGross : 0;
+
+        return {
+          totalGross, laborDed, personalD, pension, ins, mortgageD, donationD,
+          totalDed, taxableInc, calcTax, totalTaxC, incomeTax, localTax, totalTax,
+          bracket, effectiveRate, childTaxC, eduTaxC, medTaxC,
+        };
+      }, [income, other, incomeType, self, spouse, dependents, elderly, disabled,
+          pensionContrib, insurance, mortgage, donation, childCredit, eduCredit, medCredit]);
+
+      const BRACKET_LABELS = ['6%','15%','24%','35%','38%','40%','42%','45%'];
+      const BRACKET_RANGES = [
+        '~1,400만',
+        '1,400~5,000만',
+        '5,000~8,800만',
+        '8,800~1.5억',
+        '1.5억~3억',
+        '3억~5억',
+        '5억~10억',
+        '10억~',
+      ];
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+          {/* ─ 소득 입력 */}
+          <div className="section">
+            <div className="section-header"><span className="section-title">소득 입력</span></div>
+            <div className="section-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <span className="label">소득 유형</span>
+                <div className="toggle-group">
+                  {[['labor','근로소득'],['business','사업소득'],['freelance','프리랜서']].map(([v,l]) => (
+                    <button key={v} className={`toggle-btn${incomeType===v?' active':''}`} onClick={()=>setIncomeType(v)}>{l}</button>
+                  ))}
+                </div>
+                <p className="note">
+                  {incomeType==='labor'    && '근로소득공제 자동 적용 (최대 2,000만 원)'}
+                  {incomeType==='business' && '사업소득: 필요경비를 직접 입력하세요 (기타소득 공제란 활용)'}
+                  {incomeType==='freelance'&& '기타소득 필요경비 60% 자동 공제'}
+                </p>
+              </div>
+              <div className="grid-2">
+                <div>
+                  <span className="label">{incomeType==='labor'?'연간 총급여':incomeType==='business'?'총수입금액':'기타소득 총액'}</span>
+                  <div className="input-wrap">
+                    <span className="prefix">₩</span>
+                    <input className="field" type="text" inputMode="numeric" value={income} onChange={e=>setIncome(commafy(e.target.value))} placeholder="0" />
+                  </div>
+                </div>
+                <div>
+                  <span className="label">추가 소득 (이자·배당 등)</span>
+                  <div className="input-wrap">
+                    <span className="prefix">₩</span>
+                    <input className="field" type="text" inputMode="numeric" value={other} onChange={e=>setOther(commafy(e.target.value))} placeholder="0" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ─ 인적공제 */}
+          <div className="section">
+            <div className="section-header"><span className="section-title">인적공제</span><span className="mono" style={{fontSize:11,color:'var(--muted)'}}>1인당 150만 원</span></div>
+            <div className="section-body">
+              <div className="grid-3" style={{ marginBottom: 14 }}>
+                <label className="chk-wrap">
+                  <input type="checkbox" checked={self} onChange={e=>setSelf(e.target.checked)} />
+                  <span className="chk-label">본인</span>
+                </label>
+                <label className="chk-wrap">
+                  <input type="checkbox" checked={spouse} onChange={e=>setSpouse(e.target.checked)} />
+                  <span className="chk-label">배우자</span>
+                </label>
+              </div>
+              <div className="grid-3">
+                <div>
+                  <span className="label">부양가족 수</span>
+                  <select className="field" value={dependents} onChange={e=>setDependents(Number(e.target.value))}>
+                    {[0,1,2,3,4,5].map(n=><option key={n} value={n}>{n}명</option>)}
+                  </select>
+                </div>
+                <div>
+                  <span className="label">경로우대 (70세+)</span>
+                  <select className="field" value={elderly} onChange={e=>setElderly(Number(e.target.value))}>
+                    {[0,1,2,3].map(n=><option key={n} value={n}>{n}명</option>)}
+                  </select>
+                </div>
+                <div>
+                  <span className="label">장애인</span>
+                  <select className="field" value={disabled} onChange={e=>setDisabled(Number(e.target.value))}>
+                    {[0,1,2,3].map(n=><option key={n} value={n}>{n}명</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ─ 소득공제 */}
+          <div className="section">
+            <div className="section-header"><span className="section-title">소득공제</span></div>
+            <div className="section-body">
+              <div className="grid-2">
+                {[
+                  ['국민연금 납입액', pensionContrib, setPensionContrib, '최대 900만 원'],
+                  ['건강·고용보험료', insurance,      setInsurance,      '전액 공제'],
+                  ['주택담보대출 이자', mortgage,       setMortgage,       '최대 300만 원'],
+                  ['기부금',          donation,        setDonation,       '한도 내 전액'],
+                ].map(([label, val, set, hint]) => (
+                  <div key={label}>
+                    <span className="label">{label}</span>
+                    <div className="input-wrap">
+                      <span className="prefix">₩</span>
+                      <input className="field" type="text" inputMode="numeric" value={val} onChange={e=>set(commafy(e.target.value))} placeholder="0" />
+                    </div>
+                    <p className="note">{hint}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ─ 세액공제 */}
+          <div className="section">
+            <div className="section-header"><span className="section-title">세액공제</span></div>
+            <div className="section-body">
+              <div className="grid-3">
+                <div>
+                  <span className="label">자녀 수 (8세~)</span>
+                  <select className="field" value={childCredit} onChange={e=>setChildCredit(Number(e.target.value))}>
+                    {[0,1,2,3,4].map(n=><option key={n} value={n}>{n}명</option>)}
+                  </select>
+                  <p className="note">1명 15만 · 2명 35만 · 3명+ 30만 추가</p>
+                </div>
+                <div>
+                  <span className="label">교육비 지출</span>
+                  <div className="input-wrap">
+                    <span className="prefix">₩</span>
+                    <input className="field" type="text" inputMode="numeric" value={eduCredit} onChange={e=>setEduCredit(commafy(e.target.value))} placeholder="0" />
+                  </div>
+                  <p className="note">지출액의 15% 공제</p>
+                </div>
+                <div>
+                  <span className="label">의료비 지출</span>
+                  <div className="input-wrap">
+                    <span className="prefix">₩</span>
+                    <input className="field" type="text" inputMode="numeric" value={medCredit} onChange={e=>setMedCredit(commafy(e.target.value))} placeholder="0" />
+                  </div>
+                  <p className="note">총소득 3% 초과분의 15%</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ─ 세율 구간 */}
+          <div className="section">
+            <div className="section-header">
+              <span className="section-title">세율 구간 (2024)</span>
+              {result && (
+                <span className="mono" style={{fontSize:11,color:'var(--muted)'}}>
+                  적용 구간: {result.bracket.rate*100}%
+                </span>
+              )}
+            </div>
+            <div className="section-body">
+              {INCOME_BRACKETS.map((b, i) => (
+                <div key={i} className="rate-band">
+                  <span className={`rate-pill${result && result.bracket.rate===b.rate?' active':''}`}>{b.rate*100}%</span>
+                  <span style={{fontSize:12,color:'var(--muted)',flex:1}}>{BRACKET_RANGES[i]}</span>
+                  {result && result.bracket.rate===b.rate && (
+                    <span className="positive-tag">현재 구간</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ─ 결과 */}
+          {result && (
+            <>
+              <div className="result-bar">
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                  <div>
+                    <div className="result-label-sm">최종 납부세액</div>
+                    <div className="result-amount">{fmt(result.totalTax)}</div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div className="result-label-sm">실효세율</div>
+                    <div className="mono" style={{fontSize:22,fontWeight:500,letterSpacing:'-0.02em'}}>{pct(result.effectiveRate)}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="section">
+                <div className="section-header"><span className="section-title">세금 계산 내역</span></div>
+                <div className="section-body">
+                  <div className="brow">
+                    <div><div className="brow-label">총 소득</div></div>
+                    <span className="brow-value">{fmt(result.totalGross)}</span>
+                  </div>
+                  {result.laborDed > 0 && (
+                    <div className="brow">
+                      <div>
+                        <div className="brow-label">근로/필요경비 공제</div>
+                      </div>
+                      <span className="brow-value deduct">− {fmt(result.laborDed)}</span>
+                    </div>
+                  )}
+                  {result.personalD > 0 && (
+                    <div className="brow">
+                      <div><div className="brow-label">인적공제</div></div>
+                      <span className="brow-value deduct">− {fmt(result.personalD)}</span>
+                    </div>
+                  )}
+                  {result.pension > 0 && (
+                    <div className="brow">
+                      <div><div className="brow-label">국민연금 공제</div></div>
+                      <span className="brow-value deduct">− {fmt(result.pension)}</span>
+                    </div>
+                  )}
+                  {result.ins > 0 && (
+                    <div className="brow">
+                      <div><div className="brow-label">보험료 공제</div></div>
+                      <span className="brow-value deduct">− {fmt(result.ins)}</span>
+                    </div>
+                  )}
+                  {result.mortgageD > 0 && (
+                    <div className="brow">
+                      <div><div className="brow-label">주택대출이자 공제</div></div>
+                      <span className="brow-value deduct">− {fmt(result.mortgageD)}</span>
+                    </div>
+                  )}
+                  {result.donationD > 0 && (
+                    <div className="brow">
+                      <div><div className="brow-label">기부금 공제</div></div>
+                      <span className="brow-value deduct">− {fmt(result.donationD)}</span>
+                    </div>
+                  )}
+                  <div className="brow" style={{background:'var(--bg)',margin:'0 -20px',padding:'9px 20px'}}>
+                    <div><div className="brow-label" style={{fontWeight:500}}>과세표준</div></div>
+                    <span className="brow-value accent">{fmt(result.taxableInc)}</span>
+                  </div>
+                  <div className="brow">
+                    <div>
+                      <div className="brow-label">산출세액</div>
+                      <div className="brow-sub">세율 {result.bracket.rate*100}% 적용</div>
+                    </div>
+                    <span className="brow-value tax">{fmt(result.calcTax)}</span>
+                  </div>
+                  {result.totalTaxC > 0 && (
+                    <div className="brow">
+                      <div>
+                        <div className="brow-label">세액공제 합계</div>
+                        <div className="brow-sub">
+                          {[result.childTaxC>0&&`자녀 ${fmt(result.childTaxC)}`,
+                            result.eduTaxC>0&&`교육비 ${fmt(result.eduTaxC)}`,
+                            result.medTaxC>0&&`의료비 ${fmt(result.medTaxC)}`]
+                            .filter(Boolean).join(' · ')}
+                        </div>
+                      </div>
+                      <span className="brow-value deduct">− {fmt(result.totalTaxC)}</span>
+                    </div>
+                  )}
+                  <div className="brow">
+                    <div><div className="brow-label">종합소득세</div></div>
+                    <span className="brow-value tax">{fmt(result.incomeTax)}</span>
+                  </div>
+                  <div className="brow">
+                    <div>
+                      <div className="brow-label">지방소득세</div>
+                      <div className="brow-sub">종합소득세의 10%</div>
+                    </div>
+                    <span className="brow-value tax">{fmt(result.localTax)}</span>
+                  </div>
+                  <div className="brow" style={{background:'var(--bg)',margin:'0 -20px',padding:'12px 20px'}}>
+                    <div><div className="brow-label" style={{fontWeight:600,fontSize:15}}>최종 납부세액</div></div>
+                    <span className="brow-value accent" style={{fontSize:16}}>{fmt(result.totalTax)}</span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+
+    // ════════════════════════════════════════════════════════
+    // 2. 부가가치세 (VAT)
+    // ════════════════════════════════════════════════════════
+
+    function VatCalc() {
+      const [taxType,    setTaxType]    = useState('general');  // general | simplified
+      const [inputMode,  setInputMode]  = useState('supply');   // supply | total
+      const [vatRate,    setVatRate]    = useState(10);
+
+      // 매출
+      const [salesRows, setSalesRows] = useState([{ id: 1, label: '매출', amount: '' }]);
+      // 매입
+      const [purchaseRows, setPurchaseRows] = useState([{ id: 1, label: '매입', amount: '' }]);
+
+      // 간이과세율
+      const [simplifiedRate, setSimplifiedRate] = useState(40);
+
+      let rowId = 10;
+      const addRow = (setter) => setter(prev => [...prev, { id: rowId++, label: '', amount: '' }]);
+      const updateRow = (setter, id, field, val) =>
+        setter(prev => prev.map(r => r.id === id ? { ...r, [field]: val } : r));
+      const removeRow = (setter, id) => setter(prev => prev.filter(r => r.id !== id));
+
+      const parseAmount = (val) => {
+        const n = parseFloat(String(val).replace(/,/g, '')) || 0;
+        if (inputMode === 'total') return n / (1 + vatRate / 100);
+        return n;
+      };
+
+      const result = useMemo(() => {
+        const salesSupply   = salesRows.reduce((s, r)    => s + parseAmount(r.amount), 0);
+        const purchSupply   = purchaseRows.reduce((s, r) => s + parseAmount(r.amount), 0);
+
+        const salesVat      = salesSupply * (vatRate / 100);
+        const purchVat      = purchSupply * (vatRate / 100);
+
+        let payable;
+        if (taxType === 'simplified') {
+          // 간이과세: 공급대가 × 업종별 부가가치율 × 10%
+          const supplyTotal = salesSupply * (1 + vatRate / 100); // 공급대가
+          payable = supplyTotal * (simplifiedRate / 100) * 0.10;
+        } else {
+          payable = salesVat - purchVat;
+        }
+
+        const salesTotal    = salesSupply + salesVat;
+        const purchTotal    = purchSupply + purchVat;
+
+        return { salesSupply, salesVat, salesTotal, purchSupply, purchVat, purchTotal, payable };
+      }, [salesRows, purchaseRows, vatRate, taxType, simplifiedRate, inputMode]);
+
+      const SIMPLIFIED_RATES = [
+        { rate: 15, label: '소매업' },
+        { rate: 20, label: '음식점' },
+        { rate: 30, label: '제조업' },
+        { rate: 40, label: '숙박업' },
+        { rate: 40, label: '건설업' },
+        { rate: 30, label: '운수·창고' },
+        { rate: 40, label: '서비스업' },
+      ];
+
+      const isRefund = result.payable < 0;
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+          {/* ─ 과세 유형 */}
+          <div className="section">
+            <div className="section-header"><span className="section-title">과세 유형</span></div>
+            <div className="section-body" style={{display:'flex',flexDirection:'column',gap:16}}>
+              <div>
+                <span className="label">사업자 유형</span>
+                <div className="toggle-group">
+                  <button className={`toggle-btn${taxType==='general'?' active':''}`} onClick={()=>setTaxType('general')}>일반과세자</button>
+                  <button className={`toggle-btn${taxType==='simplified'?' active':''}`} onClick={()=>setTaxType('simplified')}>간이과세자</button>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div>
+                  <span className="label">입력 방식</span>
+                  <div className="toggle-group">
+                    <button className={`toggle-btn${inputMode==='supply'?' active':''}`} onClick={()=>setInputMode('supply')}>공급가액</button>
+                    <button className={`toggle-btn${inputMode==='total'?' active':''}`} onClick={()=>setInputMode('total')}>공급대가 (VAT 포함)</button>
+                  </div>
+                </div>
+                <div>
+                  <span className="label">부가세율</span>
+                  <div className="toggle-group">
+                    {[10, 0].map(r => (
+                      <button key={r} className={`toggle-btn${vatRate===r?' active':''}`} onClick={()=>setVatRate(r)}>
+                        {r===0 ? '영세율 (0%)' : `일반 (${r}%)`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {taxType === 'simplified' && (
+                <div>
+                  <span className="label">업종별 부가가치율</span>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:2}}>
+                    {SIMPLIFIED_RATES.map(({ rate, label }) => (
+                      <button
+                        key={label}
+                        className="btn"
+                        style={{
+                          borderColor: simplifiedRate===rate ? 'var(--text)' : 'var(--border)',
+                          background: simplifiedRate===rate ? 'var(--text)' : 'transparent',
+                          color: simplifiedRate===rate ? '#FAFAF8' : 'var(--muted)',
+                          padding: '6px 12px', fontSize: 11,
+                        }}
+                        onClick={() => setSimplifiedRate(rate)}
+                      >
+                        {label} ({rate}%)
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ─ 매출 */}
+          <div className="section">
+            <div className="section-header">
+              <span className="section-title">매출 세금계산서</span>
+              <button className="btn btn-ghost" style={{fontSize:10,padding:'5px 10px'}} onClick={()=>addRow(setSalesRows)}>+ 항목 추가</button>
+            </div>
+            <div className="section-body">
+              {salesRows.map(r => (
+                <div key={r.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,marginBottom:8}}>
+                  <input className="field" placeholder="항목명" value={r.label} onChange={e=>updateRow(setSalesRows,r.id,'label',e.target.value)} />
+                  <div className="input-wrap">
+                    <span className="prefix">₩</span>
+                    <input className="field" type="text" inputMode="numeric" placeholder={inputMode==='supply'?'공급가액':'공급대가'} value={r.amount}
+                      onChange={e=>updateRow(setSalesRows,r.id,'amount',commafy(e.target.value))} />
+                  </div>
+                  <button className="btn-danger" style={{fontSize:18,padding:'0 4px'}} onClick={()=>removeRow(setSalesRows,r.id)}>×</button>
+                </div>
+              ))}
+              <hr className="div" />
+              <div style={{display:'flex',justifyContent:'space-between'}}>
+                <span style={{fontSize:12,color:'var(--muted)'}}>공급가액 합계</span>
+                <span className="mono" style={{fontSize:13}}>{fmt(result.salesSupply)}</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:6}}>
+                <span style={{fontSize:12,color:'var(--muted)'}}>매출세액</span>
+                <span className="mono" style={{fontSize:13,color:'var(--negative)'}}>{fmt(result.salesVat)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ─ 매입 */}
+          {taxType === 'general' && (
+            <div className="section">
+              <div className="section-header">
+                <span className="section-title">매입 세금계산서</span>
+                <button className="btn btn-ghost" style={{fontSize:10,padding:'5px 10px'}} onClick={()=>addRow(setPurchaseRows)}>+ 항목 추가</button>
+              </div>
+              <div className="section-body">
+                {purchaseRows.map(r => (
+                  <div key={r.id} style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,marginBottom:8}}>
+                    <input className="field" placeholder="항목명" value={r.label} onChange={e=>updateRow(setPurchaseRows,r.id,'label',e.target.value)} />
+                    <div className="input-wrap">
+                      <span className="prefix">₩</span>
+                      <input className="field" type="text" inputMode="numeric" placeholder={inputMode==='supply'?'공급가액':'공급대가'} value={r.amount}
+                        onChange={e=>updateRow(setPurchaseRows,r.id,'amount',commafy(e.target.value))} />
+                    </div>
+                    <button className="btn-danger" style={{fontSize:18,padding:'0 4px'}} onClick={()=>removeRow(setPurchaseRows,r.id)}>×</button>
+                  </div>
+                ))}
+                <hr className="div" />
+                <div style={{display:'flex',justifyContent:'space-between'}}>
+                  <span style={{fontSize:12,color:'var(--muted)'}}>공급가액 합계</span>
+                  <span className="mono" style={{fontSize:13}}>{fmt(result.purchSupply)}</span>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',marginTop:6}}>
+                  <span style={{fontSize:12,color:'var(--muted)'}}>매입세액 (공제)</span>
+                  <span className="mono" style={{fontSize:13,color:'var(--positive)'}}>{fmt(result.purchVat)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ─ 결과 */}
+          <div className="result-bar" style={{background: isRefund ? 'var(--positive)' : 'var(--text)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+              <div>
+                <div className="result-label-sm">{isRefund ? '환급세액' : '납부세액'}</div>
+                <div className="result-amount">{fmt(Math.abs(result.payable))}</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                {isRefund
+                  ? <span className="mono" style={{fontSize:13,color:'#AAAAAA'}}>환급 대상</span>
+                  : <span className="mono" style={{fontSize:13,color:'#AAAAAA'}}>납부 대상</span>
+                }
+              </div>
+            </div>
+          </div>
+
+          {/* ─ 내역 */}
+          <div className="section">
+            <div className="section-header"><span className="section-title">세액 계산 내역</span></div>
+            <div className="section-body">
+              <div className="brow">
+                <div><div className="brow-label">매출 공급가액</div></div>
+                <span className="brow-value">{fmt(result.salesSupply)}</span>
+              </div>
+              <div className="brow">
+                <div><div className="brow-label">매출세액</div><div className="brow-sub">공급가액 × {vatRate}%</div></div>
+                <span className="brow-value tax">{fmt(result.salesVat)}</span>
+              </div>
+              {taxType === 'general' && (
+                <div className="brow">
+                  <div><div className="brow-label">매입세액 공제</div></div>
+                  <span className="brow-value deduct">− {fmt(result.purchVat)}</span>
+                </div>
+              )}
+              {taxType === 'simplified' && (
+                <div className="brow">
+                  <div>
+                    <div className="brow-label">간이과세 계산</div>
+                    <div className="brow-sub">공급대가 × 부가가치율 {simplifiedRate}% × 10%</div>
+                  </div>
+                  <span className="brow-value"></span>
+                </div>
+              )}
+              <div className="brow" style={{background:'var(--bg)',margin:'0 -20px',padding:'12px 20px'}}>
+                <div><div className="brow-label" style={{fontWeight:600,fontSize:15}}>{isRefund ? '환급세액' : '납부세액'}</div></div>
+                <span className={`brow-value accent`} style={{fontSize:16,color: isRefund?'var(--positive)':'var(--text)'}}>
+                  {isRefund ? '− ' : ''}{fmt(Math.abs(result.payable))}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* ─ 신고 일정 안내 */}
+          <div className="section">
+            <div className="section-header"><span className="section-title">신고 일정 안내</span></div>
+            <div className="section-body">
+              {[
+                ['1기 예정 신고', '4월 25일까지', '1월 1일 ~ 3월 31일'],
+                ['1기 확정 신고', '7월 25일까지', '1월 1일 ~ 6월 30일'],
+                ['2기 예정 신고', '10월 25일까지', '7월 1일 ~ 9월 30일'],
+                ['2기 확정 신고', '다음해 1월 25일까지', '7월 1일 ~ 12월 31일'],
+              ].map(([title, deadline, period]) => (
+                <div key={title} className="brow">
+                  <div>
+                    <div className="brow-label">{title}</div>
+                    <div className="brow-sub">{period}</div>
+                  </div>
+                  <span className="mono" style={{fontSize:12,color:'var(--muted)'}}>{deadline}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+
+    // ════════════════════════════════════════════════════════
+    // App
+    // ════════════════════════════════════════════════════════
+    function App() {
+      const [tab, setTab] = useState('income');
+
+      return (
+        <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+
+          {/* ── Header ── */}
+          <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 10 }}>
+            <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 24px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, paddingTop: 16, paddingBottom: 0 }}>
+                <span style={{ fontWeight: 500, fontSize: 15, letterSpacing: '-0.02em' }}>세금 계산기</span>
+                <span style={{ fontSize: 11, letterSpacing: '0.06em', color: 'var(--muted)', textTransform: 'uppercase' }}>Tax Calculator</span>
+              </div>
+              <div className="tabs" style={{ marginTop: 8 }}>
+                <button className={`tab${tab==='income'?' active':''}`} onClick={()=>setTab('income')}>종합소득세</button>
+                <button className={`tab${tab==='vat'?' active':''}`}    onClick={()=>setTab('vat')}>부가가치세</button>
+              </div>
+            </div>
+          </header>
+
+          {/* ── Main ── */}
+          <main style={{ maxWidth: 760, margin: '0 auto', padding: '32px 24px' }}>
+            {tab === 'income' ? <IncomeTaxCalc /> : <VatCalc />}
+          </main>
+
+          <footer style={{ textAlign: 'center', padding: '32px 0', borderTop: '1px solid var(--border)', marginTop: 48 }}>
+            <span style={{ fontSize: 10, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--subtle)' }}>
+              Tax Calculator · 2024 기준 · 실제 신고 시 세무사 상담 권장
+            </span>
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

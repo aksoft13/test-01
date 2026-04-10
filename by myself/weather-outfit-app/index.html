@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weather Outfit</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    input[type="color"] {
+      -webkit-appearance: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      background: transparent;
+    }
+    input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    input[type="color"]::-webkit-color-swatch { border: 1px solid #d1d5db; border-radius: 2px; }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+    .dot-1 { animation: pulse-dot 1.4s ease-in-out infinite; }
+    .dot-2 { animation: pulse-dot 1.4s ease-in-out 0.2s infinite; }
+    .dot-3 { animation: pulse-dot 1.4s ease-in-out 0.4s infinite; }
+    .swatch:hover { outline: 2px solid #CC0000; outline-offset: 2px; }
+    .swatch.active { outline: 2px solid #1A1A1A; outline-offset: 2px; }
+    .weekly-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .weekly-scroll::-webkit-scrollbar { display: none; }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] },
+          colors: { accent: '#CC0000' }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-[#FAFAFA]">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+    // ========================================
+    // 1. Color Math Utilities
+    // ========================================
+
+    function hexToHsl(hex) {
+      let r = parseInt(hex.slice(1,3), 16) / 255;
+      let g = parseInt(hex.slice(3,5), 16) / 255;
+      let b = parseInt(hex.slice(5,7), 16) / 255;
+      let max = Math.max(r,g,b), min = Math.min(r,g,b);
+      let h, s, l = (max+min)/2;
+      if (max === min) {
+        h = s = 0;
+      } else {
+        let d = max - min;
+        s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+        switch(max) {
+          case r: h = ((g-b)/d+(g<b?6:0))/6; break;
+          case g: h = ((b-r)/d+2)/6; break;
+          case b: h = ((r-g)/d+4)/6; break;
+        }
+      }
+      return [h*360, s*100, l*100];
+    }
+
+    function hslToHex(h, s, l) {
+      h = ((h % 360) + 360) % 360;
+      s = Math.max(0, Math.min(100, s));
+      l = Math.max(0, Math.min(100, l));
+      h /= 360; s /= 100; l /= 100;
+      let r, g, b;
+      if (s === 0) {
+        r = g = b = l;
+      } else {
+        const hue2rgb = (p, q, t) => {
+          if (t < 0) t += 1; if (t > 1) t -= 1;
+          if (t < 1/6) return p+(q-p)*6*t;
+          if (t < 1/2) return q;
+          if (t < 2/3) return p+(q-p)*(2/3-t)*6;
+          return p;
+        };
+        const q = l < 0.5 ? l*(1+s) : l+s-l*s;
+        const p = 2*l-q;
+        r = hue2rgb(p,q,h+1/3); g = hue2rgb(p,q,h); b = hue2rgb(p,q,h-1/3);
+      }
+      return '#'+[r,g,b].map(x => Math.round(x*255).toString(16).padStart(2,'0')).join('');
+    }
+
+    function getLuminance(hex) {
+      const [,, l] = hexToHsl(hex);
+      return l;
+    }
+
+    function getTextColor(hex) {
+      return getLuminance(hex) > 60 ? '#1A1A1A' : '#ffffff';
+    }
+
+    function getToneOnTone(hex) {
+      const [h, s, l] = hexToHsl(hex);
+      return [
+        { label: 'Deep',   lDelta: -32, sDelta: +10 },
+        { label: 'Dark',   lDelta: -16, sDelta: +5  },
+        { label: 'Mid',    lDelta:  -4, sDelta: +2  },
+        { label: 'Light',  lDelta: +16, sDelta: -6  },
+        { label: 'Pale',   lDelta: +30, sDelta: -18 },
+      ].filter(v => l + v.lDelta > 4 && l + v.lDelta < 96)
+       .map(v => ({ hex: hslToHex(h, s + v.sDelta, l + v.lDelta), label: v.label }));
+    }
+
+    function getToneInTone(hex) {
+      const [h, s, l] = hexToHsl(hex);
+      return [
+        { shift:  30, label: '유사A' },
+        { shift:  60, label: '유사B' },
+        { shift:  90, label: '포인트' },
+        { shift: -30, label: '유사C' },
+        { shift: -60, label: '유사D' },
+      ].map(({ shift, label }) => ({ hex: hslToHex(h + shift, s, l), label }));
+    }
+
+    // ========================================
+    // 2. Auto-fill Color Logic
+    // ========================================
+
+    function autoFillColors(changedItem, hex) {
+      const [h, s, l] = hexToHsl(hex);
+
+      if (changedItem === 'outer') {
+        return {
+          outer: hex,
+          top:   hslToHex(h, Math.max(s-15, 10), Math.min(l+20, 90)),
+          bottom: hslToHex((h+15)%360, Math.max(s-10, 10), Math.max(l-10, 5)),
+          shoes: hslToHex(h, Math.max(s-30, 5), Math.max(l-35, 5)),
+        };
+      }
+      if (changedItem === 'bottom') {
+        return {
+          bottom: hex,
+          top:   hslToHex((h+15)%360, Math.max(s-10, 10), Math.min(l+15, 90)),
+          outer: hslToHex(h, Math.min(s+5, 100), Math.max(l-15, 5)),
+          shoes: hslToHex(h, Math.min(s+10, 100), Math.max(l-25, 5)),
+        };
+      }
+      if (changedItem === 'shoes') {
+        return {
+          shoes: hex,
+          bottom: hslToHex(h, Math.max(s-10, 5), Math.min(l+20, 85)),
+          top:   hslToHex((h+10)%360, Math.max(s-20, 5), Math.min(l+30, 92)),
+          outer: hslToHex(h, Math.min(s+5, 100), Math.max(l-10, 5)),
+        };
+      }
+      // top (default)
+      return {
+        top:    hex,
+        outer:  hslToHex(h, Math.min(s+8, 100), Math.max(l-18, 5)),
+        bottom: hslToHex((h+180)%360, Math.max(s-20, 10), Math.min(l+10, 90)),
+        shoes:  hslToHex(h, Math.max(s-30, 5), Math.max(l-30, 8)),
+      };
+    }
+
+    // ========================================
+    // 3. Weather Constants & Helpers
+    // ========================================
+
+    const WMO_CODES = {
+      0: { label: '맑음', category: 'clear' },
+      1: { label: '대체로 맑음', category: 'clear' },
+      2: { label: '부분 흐림', category: 'cloudy' },
+      3: { label: '흐림', category: 'cloudy' },
+      45: { label: '안개', category: 'cloudy' },
+      48: { label: '짙은 안개', category: 'cloudy' },
+      51: { label: '이슬비', category: 'rain' },
+      53: { label: '이슬비', category: 'rain' },
+      55: { label: '이슬비', category: 'rain' },
+      61: { label: '약한 비', category: 'rain' },
+      63: { label: '비', category: 'rain' },
+      65: { label: '강한 비', category: 'rain' },
+      71: { label: '약한 눈', category: 'snow' },
+      73: { label: '눈', category: 'snow' },
+      75: { label: '강한 눈', category: 'snow' },
+      80: { label: '소나기', category: 'rain' },
+      81: { label: '소나기', category: 'rain' },
+      82: { label: '강한 소나기', category: 'rain' },
+      95: { label: '뇌우', category: 'rain' },
+    };
+
+    function getWeatherInfo(code) {
+      return WMO_CODES[code] || { label: '알 수 없음', category: 'clear' };
+    }
+
+    function getColorPalette(temperature, category) {
+      if (category === 'snow') return {
+        name: '눈 오는 날',
+        colors: [
+          { name: '와인', hex: '#722F37' }, { name: '아이보리', hex: '#FFFFF0' },
+          { name: '카멜', hex: '#C19A6B' }, { name: '버건디', hex: '#800020' },
+          { name: '크림', hex: '#FFFDD0' }, { name: '코냑', hex: '#9B4F1A' },
+          { name: '다크 네이비', hex: '#0D1B2A' }, { name: '차콜', hex: '#36454F' },
+        ],
+        combos: [
+          { name: '와인 클래식', colors: ['#722F37', '#FFFFF0', '#C19A6B', '#36454F'] },
+          { name: '버건디 무드', colors: ['#800020', '#FFFDD0', '#9B4F1A', '#0D1B2A'] },
+          { name: '아이보리 레이어', colors: ['#FFFFF0', '#C19A6B', '#9B4F1A', '#36454F'] },
+        ],
+      };
+      if (category === 'rain') return {
+        name: '비 오는 날',
+        colors: [
+          { name: '블랙', hex: '#1A1A1A' }, { name: '차콜', hex: '#36454F' },
+          { name: '네이비', hex: '#1B3A5C' }, { name: '다크 올리브', hex: '#4A5240' },
+          { name: '머스타드', hex: '#D4A017' }, { name: '레드', hex: '#CC2222' },
+          { name: '슬레이트', hex: '#708090' }, { name: '오프 화이트', hex: '#F2F0EB' },
+        ],
+        combos: [
+          { name: '올블랙 모노', colors: ['#1A1A1A', '#36454F', '#708090', '#F2F0EB'] },
+          { name: '네이비+머스타드', colors: ['#1B3A5C', '#708090', '#D4A017', '#1A1A1A'] },
+          { name: '다크 올리브', colors: ['#4A5240', '#F2F0EB', '#1A1A1A', '#36454F'] },
+        ],
+      };
+      if (category === 'cloudy') return {
+        name: '흐린 날',
+        colors: [
+          { name: '웜 그레이', hex: '#A09090' }, { name: '베이지', hex: '#E8D5B7' },
+          { name: '올리브', hex: '#6B7B3A' }, { name: '세이지', hex: '#9CAF88' },
+          { name: '테라코타', hex: '#C67C52' }, { name: '오트밀', hex: '#D4B896' },
+          { name: '밍크', hex: '#8B7355' }, { name: '라이트 그레이', hex: '#C8C8C8' },
+        ],
+        combos: [
+          { name: '어스 모노', colors: ['#A09090', '#E8D5B7', '#D4B896', '#8B7355'] },
+          { name: '세이지 그린', colors: ['#9CAF88', '#E8D5B7', '#6B7B3A', '#8B7355'] },
+          { name: '테라코타 무드', colors: ['#C67C52', '#D4B896', '#6B7B3A', '#8B7355'] },
+        ],
+      };
+      if (temperature >= 25) return {
+        name: '맑고 더운 날',
+        colors: [
+          { name: '퓨어 화이트', hex: '#F5F5F5' }, { name: '스카이 블루', hex: '#5BA4CF' },
+          { name: '민트', hex: '#7EC8B3' }, { name: '샌드', hex: '#E8D5A3' },
+          { name: '코랄', hex: '#FF7F7F' }, { name: '레몬', hex: '#FFF176' },
+          { name: '아이스 핑크', hex: '#FFCDD2' }, { name: '씨그린', hex: '#4CAF82' },
+        ],
+        combos: [
+          { name: '화이트 오션', colors: ['#F5F5F5', '#5BA4CF', '#E8D5A3', '#4CAF82'] },
+          { name: '민트 리조트', colors: ['#7EC8B3', '#F5F5F5', '#E8D5A3', '#FF7F7F'] },
+          { name: '코랄 서머', colors: ['#FF7F7F', '#F5F5F5', '#FFF176', '#FFCDD2'] },
+        ],
+      };
+      if (temperature >= 15) return {
+        name: '맑고 선선한 날',
+        colors: [
+          { name: '베이지', hex: '#E8D5B7' }, { name: '더스티 로즈', hex: '#C9A9A6' },
+          { name: '올리브', hex: '#8B9556' }, { name: '카키', hex: '#B5A97B' },
+          { name: '머스타드', hex: '#C68B00' }, { name: '세이지', hex: '#9CAF88' },
+          { name: '카멜', hex: '#C19A6B' }, { name: '라벤더', hex: '#B8A9C9' },
+        ],
+        combos: [
+          { name: '베이지 스프링', colors: ['#E8D5B7', '#C9A9A6', '#C19A6B', '#B5A97B'] },
+          { name: '올리브 어스', colors: ['#8B9556', '#B5A97B', '#E8D5B7', '#C19A6B'] },
+          { name: '머스타드 가을', colors: ['#C68B00', '#8B9556', '#E8D5B7', '#B5A97B'] },
+        ],
+      };
+      return {
+        name: '추운 날',
+        colors: [
+          { name: '네이비', hex: '#1B3A5C' }, { name: '다크 그린', hex: '#2D4A27' },
+          { name: '카멜', hex: '#C19A6B' }, { name: '버건디', hex: '#6B1C23' },
+          { name: '차콜', hex: '#36454F' }, { name: '크림', hex: '#FFFDD0' },
+          { name: '다크 브라운', hex: '#4A2C17' }, { name: '스틸 블루', hex: '#4682B4' },
+        ],
+        combos: [
+          { name: '네이비 클래식', colors: ['#1B3A5C', '#FFFDD0', '#C19A6B', '#4A2C17'] },
+          { name: '포레스트 어스', colors: ['#2D4A27', '#B5A97B', '#C19A6B', '#4A2C17'] },
+          { name: '버건디 윈터', colors: ['#6B1C23', '#36454F', '#C19A6B', '#FFFDD0'] },
+        ],
+      };
+    }
+
+    // ========================================
+    // 4. Preset Fashion Colors
+    // ========================================
+
+    const PRESET_COLORS = [
+      { name: '블랙', hex: '#1A1A1A' }, { name: '화이트', hex: '#F5F5F5' },
+      { name: '차콜', hex: '#36454F' }, { name: '라이트 그레이', hex: '#D1D5DB' },
+      { name: '네이비', hex: '#1B3A5C' }, { name: '로얄 블루', hex: '#4169E1' },
+      { name: '스카이 블루', hex: '#87CEEB' }, { name: '민트', hex: '#6EE7B7' },
+      { name: '에메랄드', hex: '#10B981' }, { name: '올리브', hex: '#6B7B3A' },
+      { name: '카키', hex: '#8B7D6B' }, { name: '베이지', hex: '#E8D5B7' },
+      { name: '캐멀', hex: '#C19A6B' }, { name: '브라운', hex: '#7C3F00' },
+      { name: '크림', hex: '#FFFDD0' }, { name: '아이보리', hex: '#FFFFF0' },
+      { name: '피치', hex: '#FFDAB9' }, { name: '코랄', hex: '#FF6B6B' },
+      { name: '레드', hex: '#DC2626' }, { name: '버건디', hex: '#800020' },
+      { name: '와인', hex: '#722F37' }, { name: '핑크', hex: '#F9A8D4' },
+      { name: '로즈', hex: '#E11D48' }, { name: '라벤더', hex: '#C4B5FD' },
+      { name: '퍼플', hex: '#7C3AED' }, { name: '머스타드', hex: '#C68B00' },
+      { name: '옐로우', hex: '#FDE047' }, { name: '오렌지', hex: '#F97316' },
+    ];
+
+    const CLOTHING_TYPES = [
+      { id: 'top', label: '상의' },
+      { id: 'outer', label: '외투' },
+      { id: 'bottom', label: '하의' },
+      { id: 'shoes', label: '신발' },
+    ];
+
+    // ========================================
+    // 5. Loading & Error States
+    // ========================================
+
+    function LoadingScreen() {
+      return (
+        <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-sm font-light tracking-widest uppercase text-neutral-400 mb-6">Loading</p>
+            <div className="flex items-center justify-center gap-2">
+              <span className="w-1.5 h-1.5 bg-neutral-800 rounded-full dot-1"></span>
+              <span className="w-1.5 h-1.5 bg-neutral-800 rounded-full dot-2"></span>
+              <span className="w-1.5 h-1.5 bg-neutral-800 rounded-full dot-3"></span>
+            </div>
+            <p className="text-neutral-400 mt-6 text-xs tracking-wide">위치 정보를 가져오는 중</p>
+          </div>
+        </div>
+      );
+    }
+
+    function ErrorScreen({ message, onRetry }) {
+      return (
+        <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center px-8">
+          <div className="max-w-sm w-full">
+            <p className="text-xs font-medium tracking-widest uppercase text-accent mb-4">Error</p>
+            <p className="text-neutral-800 text-sm leading-relaxed mb-8">{message}</p>
+            <button onClick={onRetry}
+              className="text-sm text-neutral-800 border-b border-neutral-800 pb-0.5 hover:text-accent hover:border-accent transition-colors">
+              다시 시도
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 6. Swatch Component
+    // ========================================
+
+    function Swatch({ hex, label, size = 32, selected = false, onClick, showLabel = true }) {
+      return (
+        <button
+          onClick={onClick ? () => onClick(hex) : undefined}
+          className={`flex flex-col items-center gap-1 focus:outline-none ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+          title={hex}
+        >
+          <div
+            className={`swatch ${selected ? 'active' : ''}`}
+            style={{
+              backgroundColor: hex,
+              width: size,
+              height: size,
+              borderRadius: 2,
+              border: '1px solid rgba(0,0,0,0.08)',
+            }}
+          />
+          {showLabel && label && (
+            <span className="text-[10px] text-neutral-500 tracking-tight leading-tight text-center" style={{ maxWidth: size + 16 }}>
+              {label}
+            </span>
+          )}
+        </button>
+      );
+    }
+
+    // ========================================
+    // 7. Weather Section
+    // ========================================
+
+    function WeatherSection({ weather, location }) {
+      const info = getWeatherInfo(weather.weathercode);
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}. ${String(today.getMonth()+1).padStart(2,'0')}. ${String(today.getDate()).padStart(2,'0')}`;
+
+      return (
+        <section>
+          <div className="flex items-baseline justify-between mb-8">
+            <div>
+              <h1 className="text-xs font-medium tracking-[0.2em] uppercase text-neutral-400 mb-1">Weather Outfit</h1>
+              <p className="text-sm text-neutral-600">{location}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-light text-neutral-400 tracking-wide">{dateStr}</p>
+            </div>
+          </div>
+
+          <div className="border-t border-neutral-200" />
+
+          <div className="py-10 text-center">
+            <p className="text-7xl sm:text-8xl font-extralight text-neutral-900 tracking-tighter leading-none">
+              {Math.round(weather.temperature_2m)}
+              <span className="text-3xl sm:text-4xl font-light text-neutral-400 ml-1">C</span>
+            </p>
+            <p className="text-sm font-light text-neutral-500 mt-3 tracking-wide">{info.label}</p>
+          </div>
+
+          <div className="flex justify-center gap-12 text-center pb-2">
+            <div>
+              <p className="text-[10px] font-medium tracking-widest uppercase text-neutral-400 mb-1">습도</p>
+              <p className="text-sm text-neutral-800">{weather.relative_humidity_2m}%</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-medium tracking-widest uppercase text-neutral-400 mb-1">풍속</p>
+              <p className="text-sm text-neutral-800">{weather.windspeed_10m} km/h</p>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 8. Weekly Forecast Section
+    // ========================================
+
+    const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+
+    function WeeklyForecast({ daily }) {
+      if (!daily || !daily.time) return null;
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      // Calculate global min/max for the bar range
+      const allMin = Math.min(...daily.temperature_2m_min);
+      const allMax = Math.max(...daily.temperature_2m_max);
+      const tempRange = allMax - allMin || 1;
+
+      return (
+        <section>
+          <div className="border-t border-neutral-200 pt-8 pb-2">
+            <h2 className="text-xs font-medium tracking-[0.2em] uppercase text-neutral-400 mb-5">7일 예보</h2>
+            <div className="weekly-scroll">
+              <div className="flex gap-0" style={{ minWidth: 'max-content' }}>
+                {daily.time.map((dateStr, i) => {
+                  const date = new Date(dateStr + 'T00:00:00');
+                  const dayName = DAY_NAMES[date.getDay()];
+                  const isToday = dateStr === todayStr;
+                  const weatherInfo = getWeatherInfo(daily.weathercode[i]);
+                  const tMax = Math.round(daily.temperature_2m_max[i]);
+                  const tMin = Math.round(daily.temperature_2m_min[i]);
+
+                  // Bar position calculation
+                  const barLeft = ((daily.temperature_2m_min[i] - allMin) / tempRange) * 100;
+                  const barRight = ((daily.temperature_2m_max[i] - allMin) / tempRange) * 100;
+
+                  return (
+                    <div key={dateStr}
+                      className={`flex flex-col items-center px-3 py-3 ${isToday ? 'bg-[#FFF5F5]' : ''}`}
+                      style={{ minWidth: 72, borderLeft: i > 0 ? '1px solid #E5E5E5' : 'none' }}>
+                      {/* Day name */}
+                      <p className={`text-xs font-medium mb-1 ${isToday ? 'text-accent' : date.getDay() === 0 ? 'text-accent' : date.getDay() === 6 ? 'text-blue-600' : 'text-neutral-700'}`}>
+                        {isToday ? '오늘' : dayName}
+                      </p>
+                      {/* Date */}
+                      <p className="text-[10px] text-neutral-400 mb-2">
+                        {date.getMonth()+1}/{date.getDate()}
+                      </p>
+                      {/* Weather label */}
+                      <p className={`text-[10px] mb-3 ${isToday ? 'text-accent font-medium' : 'text-neutral-500'}`}>
+                        {weatherInfo.label}
+                      </p>
+                      {/* Temps */}
+                      <p className={`text-xs font-medium ${isToday ? 'text-accent' : 'text-neutral-800'}`}>{tMax}</p>
+                      {/* Temperature bar */}
+                      <div className="w-full my-1.5 relative" style={{ height: 16 }}>
+                        <div className="absolute top-1/2 left-0 right-0" style={{ height: 1, backgroundColor: '#E5E5E5', transform: 'translateY(-50%)' }} />
+                        <div className="absolute top-1/2" style={{
+                          left: `${barLeft}%`,
+                          width: `${Math.max(barRight - barLeft, 4)}%`,
+                          height: 3,
+                          backgroundColor: isToday ? '#CC0000' : '#999',
+                          borderRadius: 1,
+                          transform: 'translateY(-50%)',
+                        }} />
+                      </div>
+                      <p className={`text-xs ${isToday ? 'text-accent' : 'text-neutral-500'}`}>{tMin}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 9. Color Palette Section
+    // ========================================
+
+    function PaletteSection({ palette }) {
+      const [copied, setCopied] = useState(null);
+
+      const handleCopy = useCallback((hex) => {
+        navigator.clipboard.writeText(hex).then(() => {
+          setCopied(hex);
+          setTimeout(() => setCopied(null), 1200);
+        });
+      }, []);
+
+      return (
+        <section>
+          <div className="border-t border-neutral-200 pt-8 pb-2">
+            <div className="flex items-baseline justify-between mb-6">
+              <h2 className="text-xs font-medium tracking-[0.2em] uppercase text-neutral-400">오늘의 추천 컬러</h2>
+              <span className="text-xs text-accent font-medium">{palette.name}</span>
+            </div>
+            <div className="flex flex-wrap gap-4 mb-6">
+              {palette.colors.map((color) => (
+                <div key={color.hex} className="flex flex-col items-center gap-1.5">
+                  <button
+                    onClick={() => handleCopy(color.hex)}
+                    className="swatch relative focus:outline-none"
+                    style={{
+                      backgroundColor: color.hex,
+                      width: 40,
+                      height: 40,
+                      borderRadius: 2,
+                      border: '1px solid rgba(0,0,0,0.08)',
+                    }}
+                    title={color.hex}
+                  >
+                    {copied === color.hex && (
+                      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold"
+                        style={{ color: getTextColor(color.hex) }}>
+                        OK
+                      </span>
+                    )}
+                  </button>
+                  <span className="text-[10px] text-neutral-500">{color.name}</span>
+                </div>
+              ))}
+            </div>
+            {palette.combos && palette.combos.length > 0 && (
+              <div className="border-t border-neutral-100 pt-5">
+                <p className="text-[10px] font-medium tracking-widest uppercase text-neutral-400 mb-4">추천 조합</p>
+                <div className="space-y-3">
+                  {palette.combos.map((combo) => (
+                    <div key={combo.name} className="flex items-center gap-3">
+                      <p className="text-[11px] text-neutral-500 w-24 flex-shrink-0">{combo.name}</p>
+                      <div className="flex gap-1.5">
+                        {combo.colors.map((hex, i) => (
+                          <button
+                            key={i}
+                            onClick={() => handleCopy(hex)}
+                            className="swatch relative focus:outline-none"
+                            style={{
+                              backgroundColor: hex,
+                              width: 32,
+                              height: 32,
+                              borderRadius: 2,
+                              border: '1px solid rgba(0,0,0,0.08)',
+                            }}
+                            title={hex}
+                          >
+                            {copied === hex && (
+                              <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold"
+                                style={{ color: getTextColor(hex) }}>
+                                OK
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-neutral-400 mt-3">클릭하면 HEX 코드 복사 · 무신사 · 핀터레스트 · Adobe Color 참고</p>
+              </div>
+            )}
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 10. SVG Figure Component
+    // ========================================
+
+    const ITEM_LABELS = { top: '상의', outer: '외투', bottom: '하의', shoes: '신발' };
+    const EMPTY = '#EBEBEB';
+
+    function darken(hex, amount) {
+      const [h, s, l] = hexToHsl(hex);
+      return hslToHex(h, s, Math.max(l - amount, 0));
+    }
+
+    function FigureSVG({ colors, activeItem, onSelectItem, hoverColors }) {
+      const display = hoverColors || colors;
+      const c = {
+        outer: display.outer || EMPTY,
+        top:   display.top   || EMPTY,
+        bottom: display.bottom || EMPTY,
+        shoes: display.shoes || EMPTY,
+      };
+      const stroke = (part) => activeItem === part ? '#CC0000' : 'rgba(0,0,0,0.06)';
+      const sw = (part) => activeItem === part ? 2 : 0.5;
+
+      return (
+        <svg viewBox="0 0 120 320" width="120" height="320" xmlns="http://www.w3.org/2000/svg">
+          {/* Hair back */}
+          <ellipse cx="60" cy="18" rx="16" ry="14" fill="#4A3728" />
+
+          {/* Head */}
+          <ellipse cx="60" cy="22" rx="14" ry="16" fill="#D4BEA8" />
+
+          {/* Hair front */}
+          <path d="M46,16 Q48,6 60,8 Q72,6 74,16 Q72,10 60,11 Q48,10 46,16Z" fill="#4A3728" />
+
+          {/* Face features — minimal */}
+          {/* Eyebrows */}
+          <line x1="52" y1="18" x2="56" y2="17" stroke="#6B5B4D" strokeWidth="0.8" strokeLinecap="round" />
+          <line x1="64" y1="17" x2="68" y2="18" stroke="#6B5B4D" strokeWidth="0.8" strokeLinecap="round" />
+          {/* Eyes */}
+          <circle cx="54" cy="21" r="1" fill="#3D2E22" />
+          <circle cx="66" cy="21" r="1" fill="#3D2E22" />
+          {/* Nose */}
+          <line x1="60" y1="24" x2="60" y2="27" stroke="#C4A882" strokeWidth="0.6" />
+          {/* Mouth */}
+          <path d="M56,31 Q60,33 64,31" fill="none" stroke="#C4A882" strokeWidth="0.6" />
+
+          {/* Neck */}
+          <rect x="56" y="37" width="8" height="9" fill="#D4BEA8" />
+
+          {/* Outer — left sleeve */}
+          <path d="M6,50 L30,47 L33,128 L6,120Z"
+            fill={c.outer} stroke={stroke('outer')} strokeWidth={sw('outer')}
+            onClick={() => onSelectItem('outer')} style={{ cursor:'pointer' }} />
+          {/* Outer — right sleeve */}
+          <path d="M90,47 L114,50 L114,120 L87,128Z"
+            fill={c.outer} stroke={stroke('outer')} strokeWidth={sw('outer')}
+            onClick={() => onSelectItem('outer')} style={{ cursor:'pointer' }} />
+          {/* Outer — body */}
+          <path d="M30,47 L90,47 L88,140 L32,140Z"
+            fill={c.outer} stroke={stroke('outer')} strokeWidth={sw('outer')}
+            onClick={() => onSelectItem('outer')} style={{ cursor:'pointer' }} />
+          {/* Outer — left lapel */}
+          <path d="M30,47 L44,47 L50,70 L32,140 L30,47Z"
+            fill={darken(c.outer, 8)} stroke="none"
+            onClick={() => onSelectItem('outer')} style={{ cursor:'pointer' }} />
+          {/* Outer — right lapel */}
+          <path d="M76,47 L90,47 L88,140 L70,70 L76,47Z"
+            fill={darken(c.outer, 8)} stroke="none"
+            onClick={() => onSelectItem('outer')} style={{ cursor:'pointer' }} />
+
+          {/* Top — inner shirt */}
+          <path d="M44,47 Q52,40 60,42 Q68,40 76,47 L74,140 L46,140Z"
+            fill={c.top} stroke={stroke('top')} strokeWidth={sw('top')}
+            onClick={() => onSelectItem('top')} style={{ cursor:'pointer' }} />
+
+          {/* Bottom — left leg */}
+          <path d="M32,140 L58,140 L56,238 L34,238Z"
+            fill={c.bottom} stroke={stroke('bottom')} strokeWidth={sw('bottom')}
+            onClick={() => onSelectItem('bottom')} style={{ cursor:'pointer' }} />
+          {/* Bottom — right leg */}
+          <path d="M62,140 L88,140 L86,238 L64,238Z"
+            fill={c.bottom} stroke={stroke('bottom')} strokeWidth={sw('bottom')}
+            onClick={() => onSelectItem('bottom')} style={{ cursor:'pointer' }} />
+
+          {/* Shoes — left */}
+          <path d="M30,238 L58,238 L60,252 L28,252 Q24,252 24,248 Q24,238 30,238Z"
+            fill={c.shoes} stroke={stroke('shoes')} strokeWidth={sw('shoes')}
+            onClick={() => onSelectItem('shoes')} style={{ cursor:'pointer' }} />
+          {/* Shoes — right */}
+          <path d="M62,238 L90,238 Q96,238 96,248 Q96,252 90,252 L60,252 L62,238Z"
+            fill={c.shoes} stroke={stroke('shoes')} strokeWidth={sw('shoes')}
+            onClick={() => onSelectItem('shoes')} style={{ cursor:'pointer' }} />
+
+          {/* Hands */}
+          <ellipse cx="6" cy="122" rx="5" ry="6" fill="#D4BEA8" />
+          <ellipse cx="114" cy="122" rx="5" ry="6" fill="#D4BEA8" />
+        </svg>
+      );
+    }
+
+    // ========================================
+    // 11. Outfit Color Matcher Section
+    // ========================================
+
+    function ToneSwatchRow({ label, desc, swatches, activeSwatch, onSelect, onHover, onHoverEnd }) {
+      return (
+        <div>
+          <div className="flex items-baseline justify-between mb-2">
+            <p className="text-[10px] font-medium tracking-widest uppercase text-neutral-400">{label}</p>
+            <p className="text-[10px] text-neutral-400">{desc}</p>
+          </div>
+          <div className="flex items-end gap-2 flex-wrap">
+            {swatches.map((s, i) => (
+              <button key={i}
+                onClick={() => onSelect(s.hex)}
+                onMouseEnter={() => onHover && onHover(s.hex)}
+                onMouseLeave={() => onHoverEnd && onHoverEnd()}
+                className={`swatch flex flex-col items-center gap-1 focus:outline-none ${activeSwatch === s.hex ? 'active' : ''}`}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 2,
+                  backgroundColor: s.hex,
+                  border: '1px solid rgba(0,0,0,0.08)',
+                }} />
+                <span className="text-[9px] text-neutral-500">{s.label}</span>
+                <span className="text-[8px] font-mono text-neutral-400">{s.hex.toUpperCase()}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function OutfitSection() {
+      const [activeItem, setActiveItem] = useState('top');
+      const [itemColors, setItemColors] = useState({ top: null, outer: null, bottom: null, shoes: null });
+      const [hoverPreview, setHoverPreview] = useState(null);
+      const [activeToneSwatch, setActiveToneSwatch] = useState(null);
+
+      const selectedHex = itemColors[activeItem];
+
+      const toneOnTone = useMemo(() =>
+        selectedHex ? getToneOnTone(selectedHex) : [], [selectedHex]);
+      const toneInTone = useMemo(() =>
+        selectedHex ? getToneInTone(selectedHex) : [], [selectedHex]);
+
+      const setColor = useCallback((hex) => {
+        const filled = autoFillColors(activeItem, hex);
+        setItemColors(filled);
+        setActiveToneSwatch(null);
+      }, [activeItem]);
+
+      const handleToneSelect = useCallback((hex) => {
+        const otherItems = ['top', 'outer', 'bottom', 'shoes'].filter(id => id !== activeItem);
+        const primaryOther = otherItems[0];
+        const filled = autoFillColors(primaryOther, hex);
+        if (selectedHex) filled[activeItem] = selectedHex;
+        setItemColors(filled);
+        setActiveToneSwatch(hex);
+        setHoverPreview(null);
+      }, [activeItem, selectedHex]);
+
+      const handleToneHover = useCallback((hex) => {
+        const otherItems = ['top', 'outer', 'bottom', 'shoes'].filter(id => id !== activeItem);
+        const primaryOther = otherItems[0];
+        const preview = autoFillColors(primaryOther, hex);
+        if (selectedHex) preview[activeItem] = selectedHex;
+        setHoverPreview(preview);
+      }, [activeItem, selectedHex]);
+
+      const handleToneHoverEnd = useCallback(() => {
+        setHoverPreview(null);
+      }, []);
+
+      return (
+        <section>
+          <div className="border-t border-neutral-200 pt-8">
+            <h2 className="text-xs font-medium tracking-[0.2em] uppercase text-neutral-400 mb-6">내 아이템 색상 매칭</h2>
+
+            {/* Figure + Color picker layout */}
+            <div className="flex gap-5 items-start">
+              {/* SVG Figure */}
+              <div className="flex-shrink-0">
+                <FigureSVG
+                  colors={itemColors}
+                  activeItem={activeItem}
+                  onSelectItem={setActiveItem}
+                  hoverColors={hoverPreview}
+                />
+              </div>
+
+              {/* Right panel */}
+              <div className="flex-1 min-w-0 pt-1">
+                {/* Item tabs — 2x2 grid */}
+                <div className="grid grid-cols-2 gap-1 mb-4">
+                  {CLOTHING_TYPES.map(({ id, label }) => (
+                    <button key={id} onClick={() => setActiveItem(id)}
+                      className={`relative py-2 text-xs font-medium transition-colors border-b-2 text-left px-1
+                        ${activeItem === id ? 'text-neutral-900 border-neutral-900' : 'text-neutral-400 border-transparent hover:text-neutral-600'}`}>
+                      {label}
+                      {itemColors[id] && (
+                        <span className="inline-block ml-1.5 w-2.5 h-2.5 rounded-sm align-middle border border-white"
+                          style={{ backgroundColor: itemColors[id] }} />
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Color picker */}
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-medium tracking-widest uppercase text-neutral-400">
+                    {ITEM_LABELS[activeItem]} 색상
+                  </p>
+                  {selectedHex && (
+                    <span className="text-[9px] font-medium text-accent tracking-wide">고정됨</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mb-3">
+                  <label className="relative cursor-pointer">
+                    <div style={{
+                      backgroundColor: selectedHex || '#EBEBEB',
+                      width: 32, height: 32, borderRadius: 2,
+                      border: '1px solid rgba(0,0,0,0.1)',
+                    }}>
+                      <input type="color" value={selectedHex || '#EBEBEB'}
+                        onChange={e => setColor(e.target.value)}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                    </div>
+                  </label>
+                  <span className="text-[10px] font-mono text-neutral-500">
+                    {selectedHex ? selectedHex.toUpperCase() : '클릭하여 선택'}
+                  </span>
+                </div>
+
+                {/* Preset swatches */}
+                <div className="flex flex-wrap gap-1">
+                  {PRESET_COLORS.map(col => (
+                    <button key={col.hex} title={col.name}
+                      onClick={() => setColor(col.hex)}
+                      className={`swatch ${selectedHex === col.hex ? 'active' : ''}`}
+                      style={{
+                        backgroundColor: col.hex,
+                        width: 18, height: 18, borderRadius: 2,
+                        border: '1px solid rgba(0,0,0,0.08)',
+                      }} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Tone recommendations */}
+            {selectedHex ? (
+              <div className="mt-6 pt-6 border-t border-neutral-200 space-y-5">
+                <ToneSwatchRow
+                  label="Tone on Tone"
+                  desc="같은 색, 밝기 변화"
+                  swatches={toneOnTone}
+                  activeSwatch={activeToneSwatch}
+                  onSelect={handleToneSelect}
+                  onHover={handleToneHover}
+                  onHoverEnd={handleToneHoverEnd}
+                />
+                <ToneSwatchRow
+                  label="Tone in Tone"
+                  desc="같은 밝기, 색상 변화"
+                  swatches={toneInTone}
+                  activeSwatch={activeToneSwatch}
+                  onSelect={handleToneSelect}
+                  onHover={handleToneHover}
+                  onHoverEnd={handleToneHoverEnd}
+                />
+                <p className="text-[10px] text-neutral-400">{ITEM_LABELS[activeItem]} 고정 · 스와치 클릭으로 나머지 코디 / 마우스를 올리면 미리보기</p>
+              </div>
+            ) : (
+              <div className="mt-4 pt-4 border-t border-neutral-100">
+                <p className="text-xs text-neutral-400">색상을 선택하면 고정 후 코디 옵션이 표시됩니다</p>
+              </div>
+            )}
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 12. App Component
+    // ========================================
+
+    function App() {
+      const [state, setState] = useState({ loading: true, error: null, weather: null, daily: null, location: '', fallback: false });
+
+      const fetchWeatherData = useCallback(async () => {
+        setState({ loading: true, error: null, weather: null, daily: null, location: '', fallback: false });
+        try {
+          const SEOUL = { latitude: 37.5665, longitude: 126.9780 };
+
+          const coords = await new Promise((resolve) => {
+            if (!navigator.geolocation) { resolve({ ...SEOUL, fallback: true }); return; }
+            navigator.geolocation.getCurrentPosition(
+              (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, fallback: false }),
+              () => resolve({ ...SEOUL, fallback: true }),
+              { timeout: 8000 }
+            );
+          });
+
+          const { latitude, longitude, fallback } = coords;
+
+          const [weatherRes, geoRes] = await Promise.all([
+            fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weathercode,windspeed_10m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto&models=kma_seamless`),
+            fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=ko`, {
+              headers: { 'User-Agent': 'WeatherOutfitApp/1.0' },
+            }),
+          ]);
+
+          if (!weatherRes.ok) throw new Error('날씨 정보를 가져오는 데 실패했습니다.');
+          const weatherData = await weatherRes.json();
+          let locationName = fallback ? '서울특별시' : '현재 위치';
+          try {
+            const geoData = await geoRes.json();
+            const addr = geoData.address || {};
+            locationName = [addr.city || addr.town || addr.county || addr.state, addr.country]
+              .filter(Boolean).join(', ') || locationName;
+          } catch {}
+
+          setState({ loading: false, error: null, weather: weatherData.current, daily: weatherData.daily, location: locationName, fallback });
+        } catch (err) {
+          setState({ loading: false, error: err.message, weather: null, daily: null, location: '', fallback: false });
+        }
+      }, []);
+
+      useEffect(() => { fetchWeatherData(); }, [fetchWeatherData]);
+
+      if (state.loading) return <LoadingScreen />;
+      if (state.error) return <ErrorScreen message={state.error} onRetry={fetchWeatherData} />;
+
+      const weatherInfo = getWeatherInfo(state.weather.weathercode);
+      const palette = getColorPalette(state.weather.temperature_2m, weatherInfo.category);
+
+      return (
+        <div className="min-h-screen bg-[#FAFAFA]">
+          <div className="max-w-lg mx-auto px-6 sm:px-8 py-10 sm:py-16">
+            <WeatherSection weather={state.weather} location={state.location} />
+            <WeeklyForecast daily={state.daily} />
+            <PaletteSection palette={palette} />
+            <OutfitSection />
+
+            {/* Refresh */}
+            <div className="border-t border-neutral-200 mt-10 pt-8 flex items-center justify-between">
+              <button
+                onClick={fetchWeatherData}
+                className="text-xs text-neutral-500 border-b border-neutral-300 pb-0.5 hover:text-accent hover:border-accent transition-colors"
+              >
+                새로고침
+              </button>
+              <p className="text-[10px] text-neutral-300">
+                {state.fallback ? '위치 권한 없음 — 서울 기준 · ' : ''}Open-Meteo KMA / OpenStreetMap
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 13. Render
+    // ========================================
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
