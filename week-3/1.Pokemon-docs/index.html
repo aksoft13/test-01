@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>포켓몬 도감 - Pokemon Search</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4ecf7 100%);
+      min-height: 100vh;
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card-animate { animation: fadeInUp 0.4s ease-out forwards; }
+    .pokeball-bg {
+      background-image: radial-gradient(circle at 100% 0%, rgba(255,255,255,0.4) 0%, transparent 50%);
+    }
+    .custom-scroll::-webkit-scrollbar { width: 8px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+    // ========================================
+    // Constants & Config
+    // ========================================
+    const PAGE_SIZE = 20;
+    const TOTAL_POKEMON = 151;
+    const POKEAPI = 'https://pokeapi.co/api/v2';
+
+    const TYPE_KO = {
+      normal: '노말', fire: '불꽃', water: '물', electric: '전기',
+      grass: '풀', ice: '얼음', fighting: '격투', poison: '독',
+      ground: '땅', flying: '비행', psychic: '에스퍼', bug: '벌레',
+      rock: '바위', ghost: '고스트', dragon: '드래곤', dark: '악',
+      steel: '강철', fairy: '페어리',
+    };
+
+    const TYPE_STYLES = {
+      '노말':   { bg: 'bg-gray-400',    text: 'text-white', ring: 'ring-gray-300',   gradient: 'from-gray-200 to-gray-300' },
+      '불꽃':   { bg: 'bg-red-500',     text: 'text-white', ring: 'ring-red-300',    gradient: 'from-red-200 to-orange-300' },
+      '물':     { bg: 'bg-blue-500',    text: 'text-white', ring: 'ring-blue-300',   gradient: 'from-blue-200 to-blue-400' },
+      '전기':   { bg: 'bg-yellow-400',  text: 'text-yellow-900', ring: 'ring-yellow-300', gradient: 'from-yellow-200 to-yellow-400' },
+      '풀':     { bg: 'bg-green-500',   text: 'text-white', ring: 'ring-green-300',  gradient: 'from-green-200 to-green-400' },
+      '얼음':   { bg: 'bg-cyan-300',    text: 'text-cyan-900', ring: 'ring-cyan-200', gradient: 'from-cyan-100 to-cyan-300' },
+      '격투':   { bg: 'bg-red-700',     text: 'text-white', ring: 'ring-red-400',    gradient: 'from-red-300 to-red-500' },
+      '독':     { bg: 'bg-purple-500',  text: 'text-white', ring: 'ring-purple-300', gradient: 'from-purple-200 to-purple-400' },
+      '땅':     { bg: 'bg-amber-600',   text: 'text-white', ring: 'ring-amber-300',  gradient: 'from-amber-200 to-amber-400' },
+      '비행':   { bg: 'bg-indigo-300',  text: 'text-indigo-900', ring: 'ring-indigo-200', gradient: 'from-indigo-100 to-indigo-300' },
+      '에스퍼': { bg: 'bg-pink-500',    text: 'text-white', ring: 'ring-pink-300',   gradient: 'from-pink-200 to-pink-400' },
+      '벌레':   { bg: 'bg-lime-500',    text: 'text-white', ring: 'ring-lime-300',   gradient: 'from-lime-200 to-lime-400' },
+      '바위':   { bg: 'bg-stone-500',   text: 'text-white', ring: 'ring-stone-300',  gradient: 'from-stone-200 to-stone-400' },
+      '고스트': { bg: 'bg-purple-700',  text: 'text-white', ring: 'ring-purple-400', gradient: 'from-purple-300 to-purple-600' },
+      '드래곤': { bg: 'bg-indigo-700',  text: 'text-white', ring: 'ring-indigo-400', gradient: 'from-indigo-300 to-indigo-600' },
+      '악':     { bg: 'bg-gray-800',    text: 'text-white', ring: 'ring-gray-600',   gradient: 'from-gray-500 to-gray-700' },
+      '강철':   { bg: 'bg-slate-400',   text: 'text-white', ring: 'ring-slate-300',  gradient: 'from-slate-200 to-slate-400' },
+      '페어리': { bg: 'bg-pink-300',    text: 'text-pink-900', ring: 'ring-pink-200', gradient: 'from-pink-100 to-pink-300' },
+    };
+
+    // Fallback data in case API fails
+    const FALLBACK_DATA = [
+      { id: 1,   nameKo: '이상해씨', nameEn: 'Bulbasaur',  types: ['풀', '독'] },
+      { id: 4,   nameKo: '파이리',   nameEn: 'Charmander', types: ['불꽃'] },
+      { id: 7,   nameKo: '꼬부기',   nameEn: 'Squirtle',   types: ['물'] },
+      { id: 25,  nameKo: '피카츄',   nameEn: 'Pikachu',    types: ['전기'] },
+      { id: 132, nameKo: '메타몽',   nameEn: 'Ditto',      types: ['노말'] },
+    ];
+
+    const getPokemonImageUrl = (id) =>
+      `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
+
+    const formatPokemonNumber = (id) => `#${String(id).padStart(3, '0')}`;
+
+    // ========================================
+    // API Helpers
+    // ========================================
+    async function fetchPokemonBatch(entries) {
+      return Promise.all(
+        entries.map(async ({ url }) => {
+          const id = parseInt(url.split('/').filter(Boolean).pop());
+          const [detail, species] = await Promise.all([
+            fetch(`${POKEAPI}/pokemon/${id}`).then(r => r.json()),
+            fetch(`${POKEAPI}/pokemon-species/${id}`).then(r => r.json()),
+          ]);
+          const nameKo = species.names.find(n => n.language.name === 'ko')?.name || detail.name;
+          const types = detail.types.map(t => TYPE_KO[t.type.name] || t.type.name);
+          return { id, nameKo, nameEn: detail.name.charAt(0).toUpperCase() + detail.name.slice(1), types };
+        })
+      );
+    }
+
+    // ========================================
+    // Components
+    // ========================================
+    function SearchInput({ value, onChange }) {
+      return (
+        <div className="relative w-full max-w-xl mx-auto">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            value={value}
+            onChange={onChange}
+            placeholder="포켓몬 이름을 검색해보세요 (예: 피카츄, Pikachu)"
+            aria-label="포켓몬 검색"
+            className="w-full pl-12 pr-10 py-4 bg-white border-2 border-gray-200 rounded-full shadow-sm focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-400 transition-all text-gray-700 placeholder-gray-400"
+          />
+          {value && (
+            <button
+              onClick={() => onChange({ target: { value: '' } })}
+              className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600"
+              aria-label="검색어 지우기"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    function TypeBadge({ type }) {
+      const style = TYPE_STYLES[type] || TYPE_STYLES['노말'];
+      return (
+        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold shadow-sm ring-2 ${style.bg} ${style.text} ${style.ring}`}>
+          {type}
+        </span>
+      );
+    }
+
+    function PokemonCard({ pokemon, index }) {
+      const primaryType = pokemon.types[0];
+      const style = TYPE_STYLES[primaryType] || TYPE_STYLES['노말'];
+      const [imgLoaded, setImgLoaded] = useState(false);
+
+      return (
+        <div
+          className="card-animate group relative bg-white rounded-3xl shadow-md hover:shadow-2xl overflow-hidden transform hover:-translate-y-2 transition-all duration-300 cursor-pointer"
+          style={{ animationDelay: `${(index % PAGE_SIZE) * 40}ms` }}
+        >
+          <div className={`pokeball-bg absolute top-0 left-0 right-0 h-40 bg-gradient-to-br ${style.gradient} opacity-80`} aria-hidden="true" />
+          <div className="absolute top-4 right-4 z-10">
+            <span className="text-lg font-extrabold text-white/70 drop-shadow-sm">{formatPokemonNumber(pokemon.id)}</span>
+          </div>
+          <div className="relative pt-6 pb-2 flex justify-center items-center h-48">
+            {!imgLoaded && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-16 h-16 rounded-full border-4 border-gray-200 border-t-blue-400 animate-spin"></div>
+              </div>
+            )}
+            <img
+              src={getPokemonImageUrl(pokemon.id)}
+              alt={`${pokemon.nameKo} (${pokemon.nameEn})`}
+              className={`relative z-10 w-36 h-36 object-contain drop-shadow-lg group-hover:scale-110 transition-transform duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={() => setImgLoaded(true)}
+              loading="lazy"
+            />
+          </div>
+          <div className="relative bg-white px-5 pt-4 pb-5 rounded-t-3xl -mt-2 z-10">
+            <div className="mb-3">
+              <h3 className="text-xl font-extrabold text-gray-800 leading-tight">{pokemon.nameKo}</h3>
+              <p className="text-sm text-gray-500 font-medium">{pokemon.nameEn}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {pokemon.types.map(type => <TypeBadge key={type} type={type} />)}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function LoadingGrid({ count = 8 }) {
+      return Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="bg-white rounded-3xl shadow-md overflow-hidden animate-pulse">
+          <div className="h-40 bg-gray-200" />
+          <div className="px-5 pt-4 pb-5">
+            <div className="h-5 bg-gray-200 rounded w-2/3 mb-2" />
+            <div className="h-4 bg-gray-100 rounded w-1/2 mb-4" />
+            <div className="flex gap-2">
+              <div className="h-6 bg-gray-200 rounded-full w-16" />
+            </div>
+          </div>
+        </div>
+      ));
+    }
+
+    function EmptyState({ query }) {
+      return (
+        <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-24 h-24 mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+            <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-bold text-gray-700 mb-1">검색 결과가 없습니다</h3>
+          <p className="text-sm text-gray-500">
+            "<span className="font-semibold text-gray-700">{query}</span>"와 일치하는 포켓몬을 찾을 수 없어요.
+          </p>
+        </div>
+      );
+    }
+
+    function Header() {
+      return (
+        <header className="relative overflow-hidden bg-gradient-to-r from-red-500 via-red-600 to-red-500 shadow-lg">
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white"></div>
+            <div className="absolute -bottom-20 -left-20 w-60 h-60 rounded-full bg-white"></div>
+          </div>
+          <div className="relative max-w-6xl mx-auto px-4 py-8 md:py-10">
+            <div className="flex items-center justify-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-white border-4 border-gray-800 relative flex items-center justify-center shadow-lg">
+                <div className="w-3 h-3 rounded-full bg-gray-800"></div>
+                <div className="absolute inset-x-0 top-1/2 h-1 bg-gray-800 -translate-y-1/2"></div>
+              </div>
+              <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight drop-shadow-md">포켓몬 도감</h1>
+            </div>
+            <p className="text-center text-red-100 mt-2 text-sm md:text-base font-medium">1세대 151마리 · Powered by PokéAPI</p>
+          </div>
+        </header>
+      );
+    }
+
+    // ========================================
+    // Main Page
+    // ========================================
+    function PokemonSearchPage() {
+      const [allPokemon, setAllPokemon] = useState([]);
+      const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+      const [loading, setLoading] = useState(true);
+      const [loadingMore, setLoadingMore] = useState(false);
+      const [error, setError] = useState(null);
+      const [query, setQuery] = useState('');
+      const allEntriesRef = useRef([]);
+
+      // Initial load: fetch list then first batch
+      useEffect(() => {
+        async function init() {
+          try {
+            const res = await fetch(`${POKEAPI}/pokemon?limit=${TOTAL_POKEMON}&offset=0`);
+            const data = await res.json();
+            allEntriesRef.current = data.results;
+            const firstBatch = await fetchPokemonBatch(data.results.slice(0, PAGE_SIZE));
+            setAllPokemon(firstBatch);
+          } catch (e) {
+            setError('API 연결 실패 - 기본 데이터를 표시합니다.');
+            setAllPokemon(FALLBACK_DATA);
+          } finally {
+            setLoading(false);
+          }
+        }
+        init();
+      }, []);
+
+      // Load more pokemon
+      const handleLoadMore = useCallback(async () => {
+        const next = visibleCount;
+        const end = Math.min(next + PAGE_SIZE, TOTAL_POKEMON);
+        if (next >= allEntriesRef.current.length) return;
+
+        setLoadingMore(true);
+        try {
+          const batch = await fetchPokemonBatch(allEntriesRef.current.slice(next, end));
+          setAllPokemon(prev => [...prev, ...batch]);
+          setVisibleCount(end);
+        } catch (e) {
+          console.error('Failed to load more:', e);
+        } finally {
+          setLoadingMore(false);
+        }
+      }, [visibleCount]);
+
+      const filteredPokemon = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return allPokemon;
+        return allPokemon.filter(p =>
+          p.nameKo.toLowerCase().includes(q) || p.nameEn.toLowerCase().includes(q)
+        );
+      }, [query, allPokemon]);
+
+      const hasMore = !query && visibleCount < TOTAL_POKEMON && allPokemon.length >= visibleCount;
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          <Header />
+
+          <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8">
+            {/* Search */}
+            <div className="mb-8">
+              <SearchInput value={query} onChange={e => setQuery(e.target.value)} />
+              {error && (
+                <p className="text-center text-xs text-amber-600 mt-3 bg-amber-50 border border-amber-200 rounded-full py-2 px-4 max-w-md mx-auto">
+                  ⚠️ {error}
+                </p>
+              )}
+              {!loading && (
+                <p className="text-center text-sm text-gray-500 mt-4">
+                  {query
+                    ? <><span className="font-bold text-gray-700">{filteredPokemon.length}</span>마리 검색됨</>
+                    : <><span className="font-bold text-gray-700">{allPokemon.length}</span> / {TOTAL_POKEMON}마리 로드됨</>
+                  }
+                </p>
+              )}
+            </div>
+
+            {/* Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {loading ? (
+                <LoadingGrid count={PAGE_SIZE} />
+              ) : filteredPokemon.length > 0 ? (
+                filteredPokemon.map((pokemon, index) => (
+                  <PokemonCard key={pokemon.id} pokemon={pokemon} index={index} />
+                ))
+              ) : (
+                <EmptyState query={query} />
+              )}
+            </div>
+
+            {/* Load More */}
+            {hasMore && (
+              <div className="flex justify-center mt-10">
+                <button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="px-8 py-3 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white font-bold rounded-full shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
+                >
+                  {loadingMore ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      로딩 중...
+                    </>
+                  ) : (
+                    `더 보기 (${TOTAL_POKEMON - visibleCount}마리 남음)`
+                  )}
+                </button>
+              </div>
+            )}
+          </main>
+
+          <footer className="text-center py-6 text-xs text-gray-400">
+            Pokémon data &amp; images © Nintendo / The Pokémon Company · Powered by <a href="https://pokeapi.co" className="underline hover:text-gray-600">PokéAPI</a>
+          </footer>
+        </div>
+      );
+    }
+
+    function App() { return <PokemonSearchPage />; }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

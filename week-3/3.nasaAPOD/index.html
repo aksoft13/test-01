@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>COSMOS — NASA Astronomy Picture of the Day</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    :root {
+      --bg-deep: #05060d;
+      --bg-navy: #0a0e1f;
+      --bg-card: #0f1329;
+      --accent-gold: #e6b450;
+      --accent-blue: #5ec8ff;
+      --text-dim: #9ca3b8;
+    }
+
+    * {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    html, body {
+      background-color: var(--bg-deep);
+      color: #f5f5f7;
+      font-family: 'Inter', sans-serif;
+      font-weight: 300;
+    }
+
+    .font-serif-display {
+      font-family: 'Playfair Display', serif;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .font-serif-med {
+      font-family: 'Playfair Display', serif;
+      font-weight: 700;
+    }
+
+    /* Starfield background */
+    .starfield {
+      background-color: #05060d;
+      background-image:
+        radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.8), transparent),
+        radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,0.6), transparent),
+        radial-gradient(1px 1px at 80% 20%, rgba(255,255,255,0.7), transparent),
+        radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,0.5), transparent),
+        radial-gradient(2px 2px at 90% 50%, rgba(255,255,255,0.4), transparent),
+        radial-gradient(1px 1px at 15% 60%, rgba(255,255,255,0.6), transparent),
+        radial-gradient(1px 1px at 70% 10%, rgba(255,255,255,0.7), transparent);
+      background-size: 200% 200%;
+      background-repeat: repeat;
+    }
+
+    /* Fade in animation */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in {
+      animation: fadeIn 0.8s ease-out forwards;
+    }
+
+    @keyframes fadeInSlow {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .fade-in-slow {
+      animation: fadeInSlow 1.4s ease-out forwards;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(40px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .slide-up {
+      animation: slideUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Shimmer skeleton */
+    @keyframes shimmer {
+      0% { background-position: -1000px 0; }
+      100% { background-position: 1000px 0; }
+    }
+    .shimmer {
+      background: linear-gradient(90deg,
+        rgba(255,255,255,0.03) 0%,
+        rgba(255,255,255,0.08) 50%,
+        rgba(255,255,255,0.03) 100%);
+      background-size: 1000px 100%;
+      animation: shimmer 2s infinite linear;
+    }
+
+    /* Hero gradient overlay */
+    .hero-overlay {
+      background: linear-gradient(
+        180deg,
+        rgba(5,6,13,0.4) 0%,
+        rgba(5,6,13,0.1) 30%,
+        rgba(5,6,13,0.6) 70%,
+        rgba(5,6,13,0.98) 100%
+      );
+    }
+
+    .hero-overlay-top {
+      background: linear-gradient(
+        180deg,
+        rgba(5,6,13,0.85) 0%,
+        rgba(5,6,13,0) 30%
+      );
+    }
+
+    /* Text shadow for legibility over images */
+    .text-shadow-lg {
+      text-shadow: 0 4px 30px rgba(0,0,0,0.7), 0 2px 8px rgba(0,0,0,0.5);
+    }
+
+    /* Scroll reveal */
+    .scroll-fade {
+      opacity: 0;
+      animation: fadeIn 1s ease-out 0.5s forwards;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 10px; }
+    ::-webkit-scrollbar-track { background: #05060d; }
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, #1a1f3a, #0f1329);
+      border-radius: 5px;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: #2a2f4a; }
+
+    /* Date picker dark styling */
+    input[type="date"] {
+      color-scheme: dark;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.8) sepia(1) saturate(3) hue-rotate(10deg);
+      cursor: pointer;
+    }
+
+    /* Drop cap for explanation first letter */
+    .drop-cap::first-letter {
+      font-family: 'Playfair Display', serif;
+      font-weight: 900;
+      font-size: 5rem;
+      line-height: 0.85;
+      float: left;
+      margin: 0.15rem 0.75rem 0 0;
+      color: var(--accent-gold);
+    }
+
+    /* Hover image scale */
+    .hover-zoom {
+      overflow: hidden;
+    }
+    .hover-zoom img {
+      transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .hover-zoom:hover img {
+      transform: scale(1.08);
+    }
+
+    /* Glow effect for accent elements */
+    .glow-gold {
+      box-shadow: 0 0 40px rgba(230, 180, 80, 0.25);
+    }
+
+    /* Magazine divider */
+    .mag-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(230,180,80,0.5), transparent);
+    }
+
+    /* Link underline animation */
+    .link-underline {
+      position: relative;
+    }
+    .link-underline::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      bottom: -4px;
+      width: 100%;
+      height: 1px;
+      background: currentColor;
+      transform: scaleX(0);
+      transform-origin: right;
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .link-underline:hover::after {
+      transform: scaleX(1);
+      transform-origin: left;
+    }
+
+    /* Button pulse */
+    @keyframes pulse-subtle {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(230,180,80,0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(230,180,80,0); }
+    }
+    .pulse-gold {
+      animation: pulse-subtle 2.5s infinite;
+    }
+
+    /* Vertical text */
+    .vertical-text {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      letter-spacing: 0.3em;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } = React;
+
+    // ========================================
+    // Constants
+    // ========================================
+    const API_KEY = 'umjHWtsRBWdybaHMMDrElL2XLFpKC42gZPsTsr5V';
+    const API_BASE = 'https://api.nasa.gov/planetary/apod';
+    const FAVORITES_KEY = 'nasa_apod_favorites_v1';
+
+    const todayStr = () => {
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    const formatDate = (iso) => {
+      if (!iso) return '';
+      const d = new Date(iso + 'T00:00:00');
+      return d.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    };
+
+    const formatDateShort = (iso) => {
+      if (!iso) return '';
+      const d = new Date(iso + 'T00:00:00');
+      return d.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    };
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    const Button = ({ variant = 'primary', size = 'md', children, className = '', ...props }) => {
+      const base = 'inline-flex items-center justify-center gap-2 font-medium tracking-wide transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed uppercase text-xs';
+      const sizes = {
+        sm: 'px-4 py-2',
+        md: 'px-6 py-3',
+        lg: 'px-8 py-4 text-sm',
+      };
+      const variants = {
+        primary: 'bg-amber-400 text-black hover:bg-amber-300 hover:scale-[1.02] active:scale-95',
+        secondary: 'bg-white/5 text-white border border-white/15 hover:bg-white/10 hover:border-amber-400/50 backdrop-blur-sm',
+        ghost: 'text-white/80 hover:text-amber-400',
+        outline: 'border border-amber-400/60 text-amber-400 hover:bg-amber-400 hover:text-black',
+        danger: 'bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20',
+      };
+      return (
+        <button className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} {...props}>
+          {children}
+        </button>
+      );
+    };
+
+    const IconButton = ({ children, className = '', ...props }) => (
+      <button
+        className={`w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 hover:border-amber-400/50 transition-all duration-300 ${className}`}
+        {...props}
+      >
+        {children}
+      </button>
+    );
+
+    const Badge = ({ children, className = '' }) => (
+      <span className={`inline-flex items-center gap-2 px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-medium border border-amber-400/40 text-amber-400 bg-amber-400/5 ${className}`}>
+        {children}
+      </span>
+    );
+
+    // ========================================
+    // Router (hash-based)
+    // ========================================
+    const RouterContext = createContext(null);
+
+    const Router = ({ children }) => {
+      const [path, setPath] = useState(window.location.hash.replace('#', '') || '/');
+      useEffect(() => {
+        const handler = () => {
+          setPath(window.location.hash.replace('#', '') || '/');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+        window.addEventListener('hashchange', handler);
+        return () => window.removeEventListener('hashchange', handler);
+      }, []);
+      const navigate = useCallback((to) => {
+        window.location.hash = to;
+      }, []);
+      return (
+        <RouterContext.Provider value={{ path, navigate }}>
+          {children}
+        </RouterContext.Provider>
+      );
+    };
+
+    const useRouter = () => useContext(RouterContext);
+
+    const Link = ({ to, children, className = '', onClick }) => {
+      const { navigate } = useRouter();
+      return (
+        <a
+          href={`#${to}`}
+          className={className}
+          onClick={(e) => {
+            e.preventDefault();
+            navigate(to);
+            onClick && onClick();
+          }}
+        >
+          {children}
+        </a>
+      );
+    };
+
+    // ========================================
+    // Favorites Hook
+    // ========================================
+    const useFavorites = () => {
+      const [favorites, setFavorites] = useState(() => {
+        try {
+          const saved = localStorage.getItem(FAVORITES_KEY);
+          return saved ? JSON.parse(saved) : [];
+        } catch {
+          return [];
+        }
+      });
+
+      const persist = (items) => {
+        setFavorites(items);
+        try {
+          localStorage.setItem(FAVORITES_KEY, JSON.stringify(items));
+        } catch {}
+      };
+
+      const isFavorite = useCallback((date) => {
+        return favorites.some(f => f.date === date);
+      }, [favorites]);
+
+      const toggleFavorite = useCallback((apod) => {
+        const exists = favorites.some(f => f.date === apod.date);
+        if (exists) {
+          persist(favorites.filter(f => f.date !== apod.date));
+        } else {
+          const stripped = {
+            date: apod.date,
+            title: apod.title,
+            url: apod.url,
+            hdurl: apod.hdurl,
+            media_type: apod.media_type,
+            copyright: apod.copyright,
+            explanation: apod.explanation,
+          };
+          persist([stripped, ...favorites]);
+        }
+      }, [favorites]);
+
+      const removeFavorite = useCallback((date) => {
+        persist(favorites.filter(f => f.date !== date));
+      }, [favorites]);
+
+      return { favorites, isFavorite, toggleFavorite, removeFavorite };
+    };
+
+    // ========================================
+    // Korean Translation Hook
+    // ========================================
+    const useKoreanTranslation = (text) => {
+      const [translated, setTranslated] = useState('');
+      const [translating, setTranslating] = useState(false);
+      const [transError, setTransError] = useState(null);
+
+      const translate = useCallback(async () => {
+        if (!text) return;
+        setTranslating(true);
+        setTransError(null);
+        setTranslated('');
+
+        // Split into ~400-char chunks at sentence boundaries
+        const sentences = text.match(/[^.!?]+[.!?]+\s*/g) || [text];
+        const chunks = [];
+        let current = '';
+        for (const s of sentences) {
+          if ((current + s).length > 400 && current) {
+            chunks.push(current.trim());
+            current = s;
+          } else {
+            current += s;
+          }
+        }
+        if (current.trim()) chunks.push(current.trim());
+
+        try {
+          const results = [];
+          for (const chunk of chunks) {
+            const res = await fetch(
+              `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=en|ko`
+            );
+            const json = await res.json();
+            results.push(json.responseData?.translatedText || chunk);
+          }
+          setTranslated(results.join(' '));
+        } catch (e) {
+          setTransError('번역을 불러오지 못했습니다.');
+        } finally {
+          setTranslating(false);
+        }
+      }, [text]);
+
+      return { translated, translating, transError, translate };
+    };
+
+    // ========================================
+    // APOD Fetch Hook
+    // ========================================
+    const useApod = (date) => {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [fetchKey, setFetchKey] = useState(0);
+
+      const retry = () => setFetchKey(k => k + 1);
+
+      useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        setError(null);
+
+        const url = date === 'random'
+          ? `${API_BASE}?api_key=${API_KEY}&count=1`
+          : `${API_BASE}?api_key=${API_KEY}&date=${date}`;
+
+        const fallbackUrl = `${API_BASE}?api_key=${API_KEY}&count=1`;
+
+        fetch(url)
+          .then(res => {
+            if (res.status === 503 && date !== 'random') {
+              // NASA API doesn't have data for this date yet — fall back to latest available
+              return fetch(fallbackUrl).then(r => {
+                if (!r.ok) throw new Error(`NASA API error: ${r.status}`);
+                return r.json();
+              });
+            }
+            if (!res.ok) throw new Error(`NASA API error: ${res.status}`);
+            return res.json();
+          })
+          .then(json => {
+            if (cancelled) return;
+            const result = Array.isArray(json) ? json[0] : json;
+            setData(result);
+            setLoading(false);
+          })
+          .catch(err => {
+            if (cancelled) return;
+            setError(err.message || 'Failed to fetch');
+            setLoading(false);
+          });
+
+        return () => { cancelled = true; };
+      }, [date, fetchKey]);
+
+      return { data, loading, error, retry };
+    };
+
+    // ========================================
+    // Skeleton Loader
+    // ========================================
+    const HeroSkeleton = () => (
+      <div className="min-h-screen">
+        <div className="relative h-screen w-full shimmer"></div>
+        <div className="max-w-4xl mx-auto px-6 py-16 space-y-4">
+          <div className="h-4 w-32 shimmer rounded"></div>
+          <div className="h-4 w-full shimmer rounded"></div>
+          <div className="h-4 w-full shimmer rounded"></div>
+          <div className="h-4 w-3/4 shimmer rounded"></div>
+        </div>
+      </div>
+    );
+
+    // ========================================
+    // Error State
+    // ========================================
+    const ErrorState = ({ message, onRetry }) => (
+      <div className="min-h-screen flex items-center justify-center px-6 starfield">
+        <div className="text-center max-w-md fade-in">
+          <div className="text-6xl mb-6 opacity-60">✦</div>
+          <h2 className="font-serif-display text-4xl mb-4 text-white">Lost in Space</h2>
+          <p className="text-white/60 mb-8 leading-relaxed">{message}</p>
+          <Button variant="primary" onClick={onRetry}>Try Again</Button>
+        </div>
+      </div>
+    );
+
+    // ========================================
+    // Media Display (image or video)
+    // ========================================
+    const ApodMedia = ({ apod, className = '' }) => {
+      if (apod.media_type === 'video') {
+        return (
+          <div className={`relative w-full h-full ${className}`}>
+            <iframe
+              src={apod.url}
+              title={apod.title}
+              className="w-full h-full absolute inset-0"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        );
+      }
+      return (
+        <img
+          src={apod.url}
+          alt={apod.title}
+          className={`w-full h-full object-cover ${className}`}
+        />
+      );
+    };
+
+    // ========================================
+    // Header / Navigation
+    // ========================================
+    const Header = ({ onDateChange, onRandom, currentDate, showControls = true }) => {
+      const { path } = useRouter();
+      const [dateValue, setDateValue] = useState(currentDate || todayStr());
+      const [menuOpen, setMenuOpen] = useState(false);
+
+      useEffect(() => {
+        if (currentDate) setDateValue(currentDate);
+      }, [currentDate]);
+
+      return (
+        <header className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-black/30 border-b border-white/5">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-3 group">
+              <div className="w-8 h-8 rounded-full border border-amber-400/60 flex items-center justify-center group-hover:rotate-180 transition-transform duration-700">
+                <span className="text-amber-400 text-sm">✦</span>
+              </div>
+              <div className="flex flex-col leading-none">
+                <span className="font-serif-display text-xl tracking-wider">COSMOS</span>
+                <span className="text-[9px] uppercase tracking-[0.3em] text-white/50 mt-1">NASA · APOD</span>
+              </div>
+            </Link>
+
+            {/* Desktop Controls */}
+            <div className="hidden md:flex items-center gap-3">
+              {showControls && path === '/' && (
+                <>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      value={dateValue}
+                      max={todayStr()}
+                      min="1995-06-16"
+                      onChange={(e) => {
+                        setDateValue(e.target.value);
+                        onDateChange && onDateChange(e.target.value);
+                      }}
+                      className="bg-white/5 border border-white/10 text-white text-xs px-4 py-2.5 rounded-none focus:outline-none focus:border-amber-400/50 backdrop-blur-sm uppercase tracking-wider"
+                    />
+                  </div>
+                  <Button variant="secondary" size="sm" onClick={onRandom}>
+                    <span>✦</span> Random
+                  </Button>
+                </>
+              )}
+              <Link to="/favorites">
+                <Button variant={path === '/favorites' ? 'primary' : 'ghost'} size="sm">
+                  ♥ Favorites
+                </Button>
+              </Link>
+            </div>
+
+            {/* Mobile menu button */}
+            <button
+              className="md:hidden w-10 h-10 flex items-center justify-center text-white"
+              onClick={() => setMenuOpen(!menuOpen)}
+              aria-label="Menu"
+            >
+              <div className="flex flex-col gap-1">
+                <span className={`block w-5 h-px bg-white transition-transform ${menuOpen ? 'rotate-45 translate-y-1' : ''}`}></span>
+                <span className={`block w-5 h-px bg-white transition-opacity ${menuOpen ? 'opacity-0' : ''}`}></span>
+                <span className={`block w-5 h-px bg-white transition-transform ${menuOpen ? '-rotate-45 -translate-y-1' : ''}`}></span>
+              </div>
+            </button>
+          </div>
+
+          {/* Mobile menu */}
+          {menuOpen && (
+            <div className="md:hidden border-t border-white/10 bg-black/80 backdrop-blur-xl px-6 py-6 space-y-4 fade-in">
+              {showControls && path === '/' && (
+                <>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-[0.2em] text-white/50 block mb-2">Pick a Date</label>
+                    <input
+                      type="date"
+                      value={dateValue}
+                      max={todayStr()}
+                      min="1995-06-16"
+                      onChange={(e) => {
+                        setDateValue(e.target.value);
+                        onDateChange && onDateChange(e.target.value);
+                        setMenuOpen(false);
+                      }}
+                      className="w-full bg-white/5 border border-white/10 text-white text-xs px-4 py-3 focus:outline-none focus:border-amber-400/50"
+                    />
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    className="w-full"
+                    onClick={() => { onRandom(); setMenuOpen(false); }}
+                  >
+                    ✦ Random Picture
+                  </Button>
+                </>
+              )}
+              <Link to="/favorites" onClick={() => setMenuOpen(false)}>
+                <Button variant={path === '/favorites' ? 'primary' : 'outline'} size="md" className="w-full">
+                  ♥ View Favorites
+                </Button>
+              </Link>
+            </div>
+          )}
+        </header>
+      );
+    };
+
+    // ========================================
+    // Home / APOD Page
+    // ========================================
+    const HomePage = () => {
+      const { path } = useRouter();
+      // parse ?date= from hash path e.g. /?date=2024-01-01
+      const parseDateFromPath = () => {
+        const match = path.match(/[?&]date=([^&]+)/);
+        if (match) return match[1];
+        if (path.includes('random')) return 'random';
+        return todayStr();
+      };
+
+      const [currentDate, setCurrentDate] = useState(parseDateFromPath());
+      const { data, loading, error, retry } = useApod(currentDate);
+      const { isFavorite, toggleFavorite } = useFavorites();
+      const [fullText, setFullText] = useState(false);
+      const { translated, translating, transError, translate } = useKoreanTranslation(data?.explanation || '');
+
+      useEffect(() => {
+        setCurrentDate(parseDateFromPath());
+      }, [path]);
+
+      useEffect(() => {
+        setFullText(false);
+      }, [currentDate]);
+
+      const handleDateChange = (d) => setCurrentDate(d);
+      const handleRandom = () => setCurrentDate('random-' + Date.now());
+
+      if (loading) {
+        return (
+          <>
+            <Header
+              onDateChange={handleDateChange}
+              onRandom={handleRandom}
+              currentDate={currentDate.startsWith('random') ? todayStr() : currentDate}
+            />
+            <HeroSkeleton />
+          </>
+        );
+      }
+
+      if (error || !data) {
+        return (
+          <>
+            <Header
+              onDateChange={handleDateChange}
+              onRandom={handleRandom}
+              currentDate={todayStr()}
+            />
+            <ErrorState message={error || 'No data available'} onRetry={retry} />
+          </>
+        );
+      }
+
+      const favorited = isFavorite(data.date);
+      const truncated = data.explanation && data.explanation.length > 600;
+      const displayText = fullText || !truncated ? data.explanation : data.explanation.slice(0, 600) + '…';
+
+      return (
+        <div className="min-h-screen">
+          <Header
+            onDateChange={handleDateChange}
+            onRandom={handleRandom}
+            currentDate={data.date}
+          />
+
+          {/* HERO SECTION */}
+          <section className="relative h-screen w-full overflow-hidden">
+            {/* Media */}
+            <div className="absolute inset-0 fade-in-slow">
+              {data.media_type === 'image' ? (
+                <img
+                  src={data.url}
+                  alt={data.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full">
+                  <ApodMedia apod={data} />
+                </div>
+              )}
+            </div>
+
+            {/* Overlays */}
+            {data.media_type === 'image' && (
+              <>
+                <div className="absolute inset-0 hero-overlay-top pointer-events-none"></div>
+                <div className="absolute inset-0 hero-overlay pointer-events-none"></div>
+              </>
+            )}
+
+            {/* Side vertical text */}
+            <div className="hidden lg:block absolute left-6 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
+              <div className="vertical-text text-[10px] uppercase text-white/40 font-medium">
+                Issue · {new Date(data.date + 'T00:00:00').getFullYear()} · NASA Daily
+              </div>
+            </div>
+
+            <div className="hidden lg:block absolute right-6 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
+              <div className="vertical-text text-[10px] uppercase text-white/40 font-medium">
+                Astronomy Picture of the Day
+              </div>
+            </div>
+
+            {/* Hero text content */}
+            <div className="absolute inset-0 flex flex-col justify-end pb-20 md:pb-32 px-6 md:px-16 lg:px-24">
+              <div className="max-w-5xl slide-up">
+                <Badge className="mb-6">
+                  <span className="w-1.5 h-1.5 bg-amber-400 rounded-full inline-block pulse-gold"></span>
+                  {data.media_type === 'video' ? 'Feature · Video' : 'Feature · Photo'}
+                </Badge>
+
+                <h1 className="font-serif-display text-4xl sm:text-5xl md:text-6xl lg:text-8xl text-white text-shadow-lg leading-[0.95] mb-6">
+                  {data.title}
+                </h1>
+
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-white/80 text-xs uppercase tracking-[0.2em]">
+                  <span>{formatDate(data.date)}</span>
+                  {data.copyright && (
+                    <>
+                      <span className="text-amber-400/60">·</span>
+                      <span>© {data.copyright.trim()}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="absolute bottom-8 right-6 md:right-16 lg:right-24 z-20 flex items-center gap-3">
+              <IconButton
+                onClick={() => toggleFavorite(data)}
+                className={favorited ? 'border-amber-400/60 bg-amber-400/10' : ''}
+                aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'}
+                title={favorited ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                <span className={`text-lg ${favorited ? 'text-amber-400' : 'text-white/70'}`}>
+                  {favorited ? '♥' : '♡'}
+                </span>
+              </IconButton>
+              {data.hdurl && (
+                <a href={data.hdurl} target="_blank" rel="noopener noreferrer">
+                  <Button variant="secondary" size="sm">
+                    HD Image ↗
+                  </Button>
+                </a>
+              )}
+            </div>
+
+            {/* Scroll hint */}
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 hidden md:flex flex-col items-center gap-2 scroll-fade pointer-events-none">
+              <span className="text-[9px] uppercase tracking-[0.3em] text-white/50">Scroll to read</span>
+              <div className="w-px h-12 bg-gradient-to-b from-white/40 to-transparent"></div>
+            </div>
+          </section>
+
+          {/* ARTICLE SECTION */}
+          <article className="relative bg-[#05060d] py-20 md:py-32 px-6 md:px-12">
+            <div className="max-w-3xl mx-auto">
+              {/* Top metadata bar */}
+              <div className="flex items-center justify-between mb-12 pb-6 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] uppercase tracking-[0.25em] text-amber-400">The Story</span>
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.25em] text-white/40">
+                  {formatDateShort(data.date)}
+                </div>
+              </div>
+
+              {/* Section title */}
+              <h2 className="font-serif-med text-3xl md:text-4xl text-white mb-8 leading-tight">
+                {data.title}
+              </h2>
+
+              {/* Explanation with drop cap */}
+              <div className="prose prose-invert max-w-none">
+                <p className="drop-cap text-white/80 text-lg leading-[1.9] font-light tracking-wide whitespace-pre-line">
+                  {displayText}
+                </p>
+              </div>
+
+              {truncated && (
+                <div className="mt-8">
+                  <button
+                    onClick={() => setFullText(!fullText)}
+                    className="text-amber-400 text-xs uppercase tracking-[0.25em] link-underline hover:text-amber-300 transition"
+                  >
+                    {fullText ? '— Read Less' : '+ Continue Reading'}
+                  </button>
+                </div>
+              )}
+
+              {/* Korean Translation */}
+              <div className="mt-10 border-t border-white/10 pt-10">
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] uppercase tracking-[0.25em] text-white/40">한국어 번역</span>
+                    {translating && (
+                      <span className="text-[10px] text-amber-400/70 animate-pulse">번역 중...</span>
+                    )}
+                  </div>
+                  {!translated && !translating && (
+                    <button
+                      onClick={translate}
+                      className="text-amber-400 text-xs uppercase tracking-[0.2em] link-underline hover:text-amber-300 transition"
+                    >
+                      ✦ 한국어로 번역
+                    </button>
+                  )}
+                </div>
+
+                {translating && (
+                  <div className="space-y-3">
+                    <div className="h-4 w-full shimmer rounded"></div>
+                    <div className="h-4 w-11/12 shimmer rounded"></div>
+                    <div className="h-4 w-4/5 shimmer rounded"></div>
+                    <div className="h-4 w-full shimmer rounded"></div>
+                    <div className="h-4 w-3/4 shimmer rounded"></div>
+                  </div>
+                )}
+
+                {transError && (
+                  <p className="text-red-400/70 text-sm">{transError}</p>
+                )}
+
+                {translated && (
+                  <p className="text-white/70 text-base leading-[2] font-light tracking-wide" style={{wordBreak:'keep-all'}}>
+                    {translated}
+                  </p>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="mag-divider my-16"></div>
+
+              {/* Credits */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-sm">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.25em] text-white/40 mb-2">Date</div>
+                  <div className="text-white/90">{formatDate(data.date)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.25em] text-white/40 mb-2">Credit</div>
+                  <div className="text-white/90">{data.copyright ? data.copyright.trim() : 'NASA / Public Domain'}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.25em] text-white/40 mb-2">Media</div>
+                  <div className="text-white/90 capitalize">{data.media_type}</div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-16 flex flex-wrap gap-4">
+                <Button variant="primary" onClick={() => toggleFavorite(data)}>
+                  {favorited ? '♥ Saved to Favorites' : '♡ Save to Favorites'}
+                </Button>
+                {data.hdurl && (
+                  <a href={data.hdurl} target="_blank" rel="noopener noreferrer">
+                    <Button variant="outline">View Full Resolution ↗</Button>
+                  </a>
+                )}
+                <Button variant="ghost" onClick={handleRandom}>
+                  ✦ Show me another
+                </Button>
+              </div>
+            </div>
+          </article>
+
+          <Footer />
+        </div>
+      );
+    };
+
+    // ========================================
+    // Favorites Page
+    // ========================================
+    const FavoritesPage = () => {
+      const { favorites, removeFavorite } = useFavorites();
+      const { navigate } = useRouter();
+
+      const handleOpen = (fav) => {
+        navigate(`/?date=${fav.date}`);
+      };
+
+      return (
+        <div className="min-h-screen starfield">
+          <Header showControls={false} />
+
+          <div className="pt-32 pb-20 px-6 md:px-12">
+            <div className="max-w-7xl mx-auto">
+              {/* Page heading */}
+              <div className="text-center mb-16 fade-in">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-amber-400 mb-4">
+                  · Personal Collection ·
+                </div>
+                <h1 className="font-serif-display text-5xl md:text-7xl text-white mb-6">
+                  Your Favorites
+                </h1>
+                <p className="text-white/60 max-w-xl mx-auto leading-relaxed">
+                  A curated gallery of cosmic wonders you've saved from the depths of the universe.
+                </p>
+                <div className="mt-8 text-[10px] uppercase tracking-[0.3em] text-white/40">
+                  {favorites.length} {favorites.length === 1 ? 'Entry' : 'Entries'}
+                </div>
+              </div>
+
+              {/* Empty state */}
+              {favorites.length === 0 ? (
+                <div className="text-center py-24 fade-in">
+                  <div className="text-6xl opacity-40 mb-6">♡</div>
+                  <h3 className="font-serif-med text-2xl text-white mb-4">No favorites yet</h3>
+                  <p className="text-white/50 mb-8 max-w-sm mx-auto">
+                    Browse today's APOD or use the random button to discover and save your first cosmic wonder.
+                  </p>
+                  <Link to="/">
+                    <Button variant="primary">Explore APOD</Button>
+                  </Link>
+                </div>
+              ) : (
+                /* Masonry-like grid */
+                <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 space-y-6">
+                  {favorites.map((fav, idx) => (
+                    <div
+                      key={fav.date}
+                      className="break-inside-avoid group relative cursor-pointer fade-in"
+                      style={{ animationDelay: `${idx * 60}ms` }}
+                      onClick={() => handleOpen(fav)}
+                    >
+                      <div className="hover-zoom relative bg-[#0f1329] border border-white/5 overflow-hidden">
+                        {fav.media_type === 'image' ? (
+                          <img
+                            src={fav.url}
+                            alt={fav.title}
+                            className="w-full h-auto block"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-full aspect-video bg-black flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="text-4xl mb-2">▶</div>
+                              <div className="text-xs uppercase tracking-wider text-white/60">Video</div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-90 group-hover:opacity-100 transition-opacity"></div>
+
+                        {/* Content */}
+                        <div className="absolute inset-x-0 bottom-0 p-6">
+                          <div className="text-[9px] uppercase tracking-[0.25em] text-amber-400/90 mb-2">
+                            {formatDateShort(fav.date)}
+                          </div>
+                          <h3 className="font-serif-med text-xl text-white leading-tight mb-3 line-clamp-2">
+                            {fav.title}
+                          </h3>
+                          {fav.copyright && (
+                            <div className="text-[10px] uppercase tracking-wider text-white/50">
+                              © {fav.copyright.trim()}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Remove button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeFavorite(fav.date);
+                          }}
+                          className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-white/80 opacity-0 group-hover:opacity-100 hover:bg-red-500/30 hover:border-red-400/60 transition-all"
+                          aria-label="Remove from favorites"
+                          title="Remove from favorites"
+                        >
+                          ×
+                        </button>
+
+                        {/* Hover indicator */}
+                        <div className="absolute top-4 left-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="text-[9px] uppercase tracking-[0.25em] text-amber-400 bg-black/60 backdrop-blur-md px-3 py-1.5 border border-amber-400/30">
+                            View →
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <Footer />
+        </div>
+      );
+    };
+
+    // ========================================
+    // Footer
+    // ========================================
+    const Footer = () => (
+      <footer className="border-t border-white/5 bg-[#05060d] py-12 px-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-3">
+              <div className="w-6 h-6 rounded-full border border-amber-400/60 flex items-center justify-center">
+                <span className="text-amber-400 text-xs">✦</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="font-serif-display text-sm tracking-wider">COSMOS</span>
+                <span className="text-[9px] uppercase tracking-[0.25em] text-white/40">Daily Astronomy</span>
+              </div>
+            </div>
+
+            <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 text-center">
+              Data provided by NASA · Images credit to their respective authors
+            </div>
+
+            <div className="flex items-center gap-6 text-[10px] uppercase tracking-[0.2em]">
+              <a href="https://apod.nasa.gov/apod/" target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-amber-400 link-underline">
+                NASA APOD ↗
+              </a>
+              <a href="https://api.nasa.gov/" target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-amber-400 link-underline">
+                API ↗
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
+    );
+
+    // ========================================
+    // Route Matching
+    // ========================================
+    const Routes = () => {
+      const { path } = useRouter();
+      if (path.startsWith('/favorites')) return <FavoritesPage />;
+      return <HomePage />;
+    };
+
+    // ========================================
+    // App Root
+    // ========================================
+    const App = () => {
+      return (
+        <Router>
+          <Routes />
+        </Router>
+      );
+    };
+
+    // ========================================
+    // Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
