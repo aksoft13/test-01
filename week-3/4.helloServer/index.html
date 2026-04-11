@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hello Server — API Playground</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      safelist: [
+        'flex','items-center','gap-2','gap-3','gap-4',
+        'text-sm','text-xs','font-mono','truncate',
+        'text-slate-200','text-slate-400','text-slate-500',
+        'mt-1','leading-snug',
+        'mx-2','mb-1','px-3','py-2','rounded-lg','cursor-pointer',
+        'transition-colors','hover:bg-slate-800',
+        'bg-slate-800','ring-1','ring-sky-500/40',
+        'hidden',
+        'text-green-400','text-sky-400','text-orange-400','text-red-400',
+        'font-semibold',
+        'pl-[60px]',
+      ]
+    }
+  </script>
+  <style>
+    /* JSON syntax highlight palette */
+    .json-key     { color: #7dd3fc; }  /* sky-300  */
+    .json-string  { color: #86efac; }  /* green-300 */
+    .json-number  { color: #fca5a5; }  /* red-300  */
+    .json-boolean { color: #fdba74; }  /* orange-300 */
+    .json-null    { color: #d8b4fe; }  /* purple-300 */
+
+    /* Custom scrollbar for dark theme */
+    ::-webkit-scrollbar        { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track  { background: #0f172a; }
+    ::-webkit-scrollbar-thumb  { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+    .method-badge {
+      font-family: 'SF Mono', Menlo, Consolas, monospace;
+      font-weight: 700;
+      font-size: 0.70rem;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.25rem;
+      min-width: 52px;
+      text-align: center;
+      display: inline-block;
+    }
+    .method-GET    { background: #0c4a6e; color: #7dd3fc; }
+    .method-POST   { background: #14532d; color: #86efac; }
+    .method-PUT    { background: #78350f; color: #fdba74; }
+    .method-DELETE { background: #7f1d1d; color: #fca5a5; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased h-screen overflow-hidden">
+
+  <!-- Top bar -->
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur">
+    <div class="flex items-center justify-between px-6 py-3">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center font-bold">H</div>
+        <div>
+          <h1 class="text-lg font-semibold tracking-tight">Hello Server</h1>
+          <p class="text-xs text-slate-400">Lightweight API Playground</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-slate-400">
+        <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+        <span>localhost:3000</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main split layout -->
+  <main class="flex h-[calc(100vh-61px)]">
+
+    <!-- Left: endpoint list -->
+    <aside class="w-80 border-r border-slate-800 overflow-y-auto bg-slate-900/30">
+      <div class="px-4 py-3 border-b border-slate-800">
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Endpoints</h2>
+      </div>
+      <ul id="endpoint-list" class="py-2"></ul>
+    </aside>
+
+    <!-- Right: request + response panel -->
+    <section class="flex-1 overflow-y-auto">
+      <div id="empty-state" class="h-full flex flex-col items-center justify-center text-slate-500">
+        <div class="w-16 h-16 rounded-full border-2 border-dashed border-slate-700 flex items-center justify-center mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+        </div>
+        <p class="text-sm">Select an endpoint from the left to get started</p>
+      </div>
+
+      <div id="request-panel" class="hidden p-6 space-y-6">
+        <!-- Endpoint header -->
+        <div class="flex items-start gap-3">
+          <span id="sel-method" class="method-badge"></span>
+          <div class="flex-1 min-w-0">
+            <h2 id="sel-path" class="text-xl font-mono font-semibold break-all"></h2>
+            <p id="sel-description" class="text-sm text-slate-400 mt-1"></p>
+          </div>
+        </div>
+
+        <!-- URL param input (for :id routes) -->
+        <div id="param-section" class="hidden">
+          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">URL Parameter</label>
+          <input id="param-input" type="text" placeholder="Enter value for :id"
+                 class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono
+                        focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500" />
+        </div>
+
+        <!-- Request body (POST/PUT) -->
+        <div id="body-section" class="hidden">
+          <div class="flex items-center justify-between mb-2">
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Request Body (JSON)</label>
+            <button id="body-format-btn" class="text-xs text-slate-400 hover:text-sky-400">Format</button>
+          </div>
+          <textarea id="body-input" rows="8"
+                    class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono
+                           focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 resize-y"></textarea>
+        </div>
+
+        <!-- Send button -->
+        <div>
+          <button id="send-btn"
+                  class="bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-semibold
+                         px-5 py-2.5 rounded-lg text-sm transition-colors
+                         disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+            </svg>
+            <span id="send-btn-label">Send Request</span>
+          </button>
+        </div>
+
+        <!-- Response section -->
+        <div id="response-section" class="hidden border-t border-slate-800 pt-6">
+          <div class="flex items-center gap-4 mb-3">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Response</h3>
+            <div class="flex items-center gap-3 text-xs">
+              <span>Status: <span id="resp-status" class="font-mono font-semibold"></span></span>
+              <span class="text-slate-600">|</span>
+              <span>Time: <span id="resp-time" class="font-mono font-semibold text-slate-200"></span></span>
+            </div>
+          </div>
+          <pre id="resp-body" class="bg-slate-900 border border-slate-800 rounded-lg p-4 text-sm font-mono overflow-x-auto whitespace-pre-wrap break-words"></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/client.js"></script>
+</body>
+</html>

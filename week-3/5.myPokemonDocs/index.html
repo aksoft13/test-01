@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Pokemon Docs</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @keyframes shimmer {
+      0% { background-position: -1000px 0; }
+      100% { background-position: 1000px 0; }
+    }
+    .skeleton {
+      background: linear-gradient(90deg, #1f2937 0%, #374151 50%, #1f2937 100%);
+      background-size: 1000px 100%;
+      animation: shimmer 1.8s infinite linear;
+    }
+    @keyframes bob {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+    .bob { animation: bob 3s ease-in-out infinite; }
+
+    @keyframes spin-slow {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .spin-slow { animation: spin-slow 1.2s linear infinite; }
+
+    .pokeball-bg {
+      background-image: radial-gradient(circle at 50% 50%, rgba(239, 68, 68, 0.08) 0%, transparent 60%),
+                        radial-gradient(circle at 80% 20%, rgba(239, 68, 68, 0.05) 0%, transparent 40%);
+    }
+
+    .stat-bar-fill {
+      transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: #111827; }
+    ::-webkit-scrollbar-thumb { background: #ef4444; border-radius: 5px; }
+    ::-webkit-scrollbar-thumb:hover { background: #dc2626; }
+  </style>
+</head>
+<body class="bg-gray-900">
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+    // ========================================
+    // Constants
+    // ========================================
+    const API_BASE_URL = 'https://pokeapi.co/api/v2';
+    const MAX_POKEMON_ID = 151; // Gen 1
+
+    const TYPE_COLORS = {
+      fire: 'bg-orange-500 text-white',
+      water: 'bg-blue-500 text-white',
+      grass: 'bg-green-500 text-white',
+      electric: 'bg-yellow-400 text-gray-900',
+      psychic: 'bg-pink-500 text-white',
+      ice: 'bg-cyan-400 text-gray-900',
+      dragon: 'bg-indigo-600 text-white',
+      dark: 'bg-gray-700 text-white',
+      fairy: 'bg-pink-300 text-gray-900',
+      normal: 'bg-gray-400 text-gray-900',
+      fighting: 'bg-red-700 text-white',
+      flying: 'bg-sky-400 text-gray-900',
+      poison: 'bg-purple-500 text-white',
+      ground: 'bg-yellow-600 text-white',
+      rock: 'bg-yellow-700 text-white',
+      bug: 'bg-lime-500 text-gray-900',
+      ghost: 'bg-purple-700 text-white',
+      steel: 'bg-gray-400 text-gray-900',
+    };
+
+    const STAT_COLORS = {
+      hp: 'bg-red-500',
+      attack: 'bg-orange-500',
+      defense: 'bg-yellow-500',
+      speed: 'bg-green-500',
+    };
+
+    const STAT_LABELS = {
+      hp: 'HP',
+      attack: 'ATK',
+      defense: 'DEF',
+      speed: 'SPD',
+    };
+
+    // ========================================
+    // Utility Functions
+    // ========================================
+    const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+    const formatId = (id) => `#${String(id).padStart(3, '0')}`;
+    const formatHeight = (dm) => `${(dm / 10).toFixed(1)} m`;
+    const formatWeight = (hg) => `${(hg / 10).toFixed(1)} kg`;
+
+    const getRandomIds = (count, max) => {
+      const ids = new Set();
+      while (ids.size < count) {
+        ids.add(Math.floor(Math.random() * max) + 1);
+      }
+      return Array.from(ids);
+    };
+
+    const extractStats = (statsArray) => {
+      const wanted = ['hp', 'attack', 'defense', 'speed'];
+      const result = {};
+      statsArray.forEach((s) => {
+        if (wanted.includes(s.stat.name)) {
+          result[s.stat.name] = s.base_stat;
+        }
+      });
+      return result;
+    };
+
+    const fetchPokemon = async (query) => {
+      const res = await fetch(`${API_BASE_URL}/pokemon/${String(query).toLowerCase().trim()}`);
+      if (!res.ok) throw new Error('Pokemon not found');
+      const data = await res.json();
+      return {
+        id: data.id,
+        name: data.name,
+        sprite:
+          data.sprites.other?.['official-artwork']?.front_default ||
+          data.sprites.front_default,
+        types: data.types.map((t) => t.type.name),
+        height: data.height,
+        weight: data.weight,
+        stats: extractStats(data.stats),
+      };
+    };
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function Button({ children, variant = 'primary', size = 'md', disabled, onClick, type = 'button', className = '' }) {
+      const base = 'inline-flex items-center justify-center font-semibold rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed';
+      const variants = {
+        primary: 'bg-red-500 hover:bg-red-600 text-white focus:ring-red-500 shadow-lg shadow-red-500/20',
+        secondary: 'bg-gray-700 hover:bg-gray-600 text-white focus:ring-gray-500',
+        ghost: 'bg-transparent hover:bg-gray-800 text-gray-300 focus:ring-gray-500',
+      };
+      const sizes = {
+        sm: 'px-3 py-1.5 text-sm',
+        md: 'px-5 py-2.5 text-base',
+        lg: 'px-7 py-3 text-lg',
+      };
+      return (
+        <button
+          type={type}
+          onClick={onClick}
+          disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ value, onChange, onKeyDown, placeholder, disabled, className = '' }) {
+      return (
+        <input
+          type="text"
+          value={value}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          disabled={disabled}
+          className={`w-full bg-gray-800 border border-gray-700 text-white placeholder-gray-500 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition ${className}`}
+        />
+      );
+    }
+
+    function Badge({ children, className = '' }) {
+      return (
+        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-md ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl border border-gray-700/60 shadow-xl overflow-hidden ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Feature Components
+    // ========================================
+    function StatBar({ label, value, colorClass }) {
+      const pct = Math.min(100, Math.round((value / 180) * 100));
+      return (
+        <div className="flex items-center gap-2">
+          <span className="w-9 text-[10px] font-bold text-gray-400 uppercase tracking-wider">{label}</span>
+          <span className="w-8 text-xs font-semibold text-gray-200 tabular-nums text-right">{value}</span>
+          <div className="flex-1 h-2 bg-gray-700/60 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full stat-bar-fill ${colorClass}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    function PokemonCard({ pokemon }) {
+      return (
+        <Card className="group hover:scale-[1.02] hover:border-red-500/40 hover:shadow-red-500/10 transition-all duration-300">
+          <div className="relative bg-gradient-to-b from-gray-700/40 to-gray-800/20 pokeball-bg p-4 pb-2">
+            <span className="absolute top-3 right-4 text-sm font-bold text-gray-500 tabular-nums">
+              {formatId(pokemon.id)}
+            </span>
+            <div className="flex items-center justify-center h-40">
+              {pokemon.sprite ? (
+                <img
+                  src={pokemon.sprite}
+                  alt={pokemon.name}
+                  className="h-40 w-40 object-contain drop-shadow-[0_10px_15px_rgba(0,0,0,0.5)] bob"
+                />
+              ) : (
+                <div className="h-40 w-40 flex items-center justify-center text-gray-600">No image</div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-4 pt-3">
+            <h3 className="text-xl font-extrabold text-white tracking-tight">
+              {capitalize(pokemon.name)}
+            </h3>
+
+            <div className="flex flex-wrap gap-2 mt-2">
+              {pokemon.types.map((t) => (
+                <Badge key={t} className={TYPE_COLORS[t] || 'bg-gray-600 text-white'}>
+                  {t}
+                </Badge>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mt-4 mb-3">
+              <div className="bg-gray-900/60 rounded-lg px-3 py-2 border border-gray-700/50">
+                <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Height</div>
+                <div className="text-sm font-bold text-white">{formatHeight(pokemon.height)}</div>
+              </div>
+              <div className="bg-gray-900/60 rounded-lg px-3 py-2 border border-gray-700/50">
+                <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Weight</div>
+                <div className="text-sm font-bold text-white">{formatWeight(pokemon.weight)}</div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-2 border-t border-gray-700/50">
+              {['hp', 'attack', 'defense', 'speed'].map((key) => (
+                <StatBar
+                  key={key}
+                  label={STAT_LABELS[key]}
+                  value={pokemon.stats[key] || 0}
+                  colorClass={STAT_COLORS[key]}
+                />
+              ))}
+            </div>
+          </div>
+        </Card>
+      );
+    }
+
+    function SkeletonCard() {
+      return (
+        <Card>
+          <div className="p-4">
+            <div className="h-40 w-full skeleton rounded-xl" />
+            <div className="h-6 w-32 skeleton rounded mt-4" />
+            <div className="flex gap-2 mt-3">
+              <div className="h-5 w-14 skeleton rounded-full" />
+              <div className="h-5 w-14 skeleton rounded-full" />
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-4">
+              <div className="h-12 skeleton rounded-lg" />
+              <div className="h-12 skeleton rounded-lg" />
+            </div>
+            <div className="space-y-2 mt-4">
+              <div className="h-2 skeleton rounded-full" />
+              <div className="h-2 skeleton rounded-full" />
+              <div className="h-2 skeleton rounded-full" />
+              <div className="h-2 skeleton rounded-full" />
+            </div>
+          </div>
+        </Card>
+      );
+    }
+
+    function SearchBar({ query, setQuery, onSearch, onRandom, loading }) {
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter') onSearch();
+      };
+      return (
+        <div className="w-full max-w-2xl mx-auto">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex-1 relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                {/* search icon */}
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.2-5.2M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z" />
+                </svg>
+              </span>
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="이름 또는 번호로 검색 (예: pikachu, 25)"
+                disabled={loading}
+                className="pl-10"
+              />
+            </div>
+            <Button onClick={onSearch} disabled={loading || !query.trim()}>
+              검색
+            </Button>
+            <Button onClick={onRandom} variant="secondary" disabled={loading}>
+              랜덤
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    function ErrorState({ message, onReset }) {
+      return (
+        <div className="col-span-full flex flex-col items-center justify-center py-20 px-6">
+          <div className="text-7xl mb-4 grayscale">?</div>
+          <div className="text-2xl font-extrabold text-white mb-2">포켓몬을 찾을 수 없습니다</div>
+          <p className="text-gray-400 text-center max-w-md mb-6">{message}</p>
+          <Button onClick={onReset} variant="primary">다시 불러오기</Button>
+        </div>
+      );
+    }
+
+    function Header() {
+      return (
+        <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
+            {/* Pokeball icon */}
+            <div className="relative h-9 w-9 rounded-full bg-white overflow-hidden border-2 border-gray-900 shadow-lg shadow-red-500/30">
+              <div className="absolute inset-0 bg-red-500" style={{ clipPath: 'inset(0 0 50% 0)' }} />
+              <div className="absolute top-1/2 left-0 right-0 h-[3px] bg-gray-900 -translate-y-1/2" />
+              <div className="absolute top-1/2 left-1/2 h-3 w-3 rounded-full bg-white border-[2px] border-gray-900 -translate-x-1/2 -translate-y-1/2" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                My <span className="text-red-500">Pokémon</span> Docs
+              </h1>
+              <p className="text-xs text-gray-500 hidden sm:block">포켓몬 도감을 탐색해 보세요 · Gen I</p>
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    function Footer() {
+      return (
+        <footer className="border-t border-gray-800 mt-12 py-6 text-center text-xs text-gray-500">
+          Powered by <a href="https://pokeapi.co" target="_blank" rel="noreferrer" className="text-red-500 hover:text-red-400 font-semibold">PokéAPI</a>
+        </footer>
+      );
+    }
+
+    // ========================================
+    // Page Component
+    // ========================================
+    function PokedexPage() {
+      const [pokemons, setPokemons] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [query, setQuery] = useState('');
+      const [mode, setMode] = useState('random'); // 'random' | 'search'
+
+      const loadRandom = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        setMode('random');
+        setQuery('');
+        try {
+          const ids = getRandomIds(5, MAX_POKEMON_ID);
+          const results = await Promise.all(ids.map((id) => fetchPokemon(id)));
+          setPokemons(results);
+        } catch (err) {
+          setError('포켓몬 데이터를 불러오는 중 오류가 발생했습니다.');
+          setPokemons([]);
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      const handleSearch = useCallback(async () => {
+        const q = query.trim();
+        if (!q) return;
+        setLoading(true);
+        setError(null);
+        setMode('search');
+        try {
+          const result = await fetchPokemon(q);
+          setPokemons([result]);
+        } catch (err) {
+          setError(`"${q}"에 해당하는 포켓몬을 찾을 수 없습니다. 다른 이름이나 번호로 시도해 보세요.`);
+          setPokemons([]);
+        } finally {
+          setLoading(false);
+        }
+      }, [query]);
+
+      useEffect(() => {
+        loadRandom();
+      }, [loadRandom]);
+
+      return (
+        <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
+          <Header />
+
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8">
+            <section className="mb-8">
+              <SearchBar
+                query={query}
+                setQuery={setQuery}
+                onSearch={handleSearch}
+                onRandom={loadRandom}
+                loading={loading}
+              />
+            </section>
+
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-white">
+                  {mode === 'search' ? '검색 결과' : '랜덤 포켓몬'}
+                </h2>
+                {loading && (
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <div className="h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full spin-slow" />
+                    불러오는 중...
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+                {loading &&
+                  Array.from({ length: mode === 'search' ? 1 : 5 }).map((_, i) => (
+                    <SkeletonCard key={`sk-${i}`} />
+                  ))}
+
+                {!loading && error && (
+                  <ErrorState message={error} onReset={loadRandom} />
+                )}
+
+                {!loading && !error &&
+                  pokemons.map((p) => <PokemonCard key={p.id} pokemon={p} />)}
+              </div>
+            </section>
+          </main>
+
+          <Footer />
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Root
+    // ========================================
+    function App() {
+      return <PokedexPage />;
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
