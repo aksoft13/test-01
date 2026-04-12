@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>마이 미드저니 - AI 이미지 생성</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: { 800: '#1a1a2e', 900: '#0f0f1a', 950: '#0a0a12' },
+            violet: { 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9' }
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { background: #0f0f1a; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3); }
+      50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.6); }
+    }
+    .spinner { animation: spin 1s linear infinite; }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+    .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+    .gallery-img { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .gallery-img:hover { transform: scale(1.03); box-shadow: 0 8px 30px rgba(139, 92, 246, 0.3); }
+    .style-card { transition: all 0.2s ease; }
+    .style-card:hover { transform: translateY(-2px); }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #1a1a2e; }
+    ::-webkit-scrollbar-thumb { background: #4c1d95; border-radius: 4px; }
+  </style>
+</head>
+<body class="min-h-screen text-gray-100">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+    // ========================================
+    // Style Presets Data
+    // ========================================
+    const STYLE_PRESETS = [
+      { id: 'none', label: '없음', suffix: '', icon: '✨' },
+      { id: 'ghibli', label: '지브리', suffix: 'Studio Ghibli style, anime, soft colors, detailed background', icon: '🌿' },
+      { id: 'watercolor', label: '수채화', suffix: 'watercolor painting style, soft edges, flowing colors', icon: '🎨' },
+      { id: 'pixel', label: '픽셀아트', suffix: 'pixel art style, retro 8-bit, colorful pixels', icon: '🕹️' },
+      { id: 'cyberpunk', label: '사이버펑크', suffix: 'cyberpunk style, neon lights, futuristic city, dark atmosphere', icon: '🌆' },
+      { id: 'oil', label: '유화', suffix: 'oil painting style, thick brushstrokes, rich colors, classical art', icon: '🖼️' },
+      { id: 'minimal', label: '미니멀', suffix: 'minimalist style, clean lines, simple shapes, white background', icon: '⬜' },
+      { id: 'fantasy', label: '판타지', suffix: 'fantasy art style, magical, epic, detailed illustration', icon: '🐉' },
+      { id: 'photo', label: '실사 느낌', suffix: 'photorealistic, ultra detailed, 8K, professional photography', icon: '📷' },
+    ];
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function Button({ children, onClick, variant = 'primary', size = 'md', disabled = false, className = '' }) {
+      const base = 'font-semibold rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-navy-900 disabled:opacity-50 disabled:cursor-not-allowed';
+      const variants = {
+        primary: 'bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-600/25 hover:shadow-violet-500/40',
+        secondary: 'bg-gray-700 hover:bg-gray-600 text-gray-200',
+        danger: 'bg-red-600/80 hover:bg-red-500 text-white',
+        ghost: 'bg-transparent hover:bg-white/10 text-gray-300',
+      };
+      const sizes = {
+        sm: 'px-3 py-1.5 text-sm',
+        md: 'px-5 py-2.5 text-base',
+        lg: 'px-8 py-3.5 text-lg',
+      };
+      return (
+        <button onClick={onClick} disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ type = 'text', label, value, onChange, placeholder, error, disabled, className = '' }) {
+      return (
+        <div className={className}>
+          {label && <label className="block text-sm font-medium text-gray-300 mb-1.5">{label}</label>}
+          <input type={type} value={value} onChange={onChange} placeholder={placeholder} disabled={disabled}
+            className={`w-full px-4 py-2.5 bg-navy-900 border rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all ${error ? 'border-red-500' : 'border-gray-700'}`} />
+          {error && <p className="mt-1 text-sm text-red-400">{error}</p>}
+        </div>
+      );
+    }
+
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`bg-navy-800 border border-gray-700/50 rounded-xl shadow-xl ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Modal({ isOpen, onClose, children, size = 'lg' }) {
+      if (!isOpen) return null;
+      const sizes = { md: 'max-w-md', lg: 'max-w-3xl', xl: 'max-w-5xl', full: 'max-w-[90vw]' };
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+          <div className={`relative ${sizes[size]} w-full max-h-[90vh] overflow-auto bg-navy-800 rounded-2xl border border-gray-700/50 shadow-2xl fade-in`}
+            onClick={e => e.stopPropagation()}>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    function Badge({ children, className = '' }) {
+      return (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-600/30 text-violet-300 border border-violet-500/30 ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Spinner({ size = 'md' }) {
+      const s = { sm: 'w-5 h-5', md: 'w-8 h-8', lg: 'w-12 h-12' };
+      return (
+        <div className={`${s[size]} spinner border-2 border-violet-400/30 border-t-violet-400 rounded-full`} />
+      );
+    }
+
+    // ========================================
+    // API Key Section Component
+    // ========================================
+    function ApiKeySection({ apiKey, setApiKey }) {
+      const [inputKey, setInputKey] = useState('');
+      const [editing, setEditing] = useState(false);
+
+      const hasSavedKey = !!apiKey;
+      const maskedKey = apiKey ? apiKey.slice(0, 8) + '...' + apiKey.slice(-4) : '';
+
+      const handleSave = () => {
+        const trimmed = inputKey.trim();
+        if (!trimmed) return;
+        localStorage.setItem('fal_api_key', trimmed);
+        setApiKey(trimmed);
+        setInputKey('');
+        setEditing(false);
+      };
+
+      const handleDelete = () => {
+        localStorage.removeItem('fal_api_key');
+        setApiKey('');
+        setInputKey('');
+        setEditing(false);
+      };
+
+      if (hasSavedKey && !editing) {
+        return (
+          <Card className="p-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-2.5 h-2.5 bg-green-400 rounded-full shadow-lg shadow-green-400/50" />
+                <span className="text-sm text-gray-300">API Key:</span>
+                <code className="text-sm text-violet-300 bg-violet-900/30 px-2 py-0.5 rounded">{maskedKey}</code>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>수정</Button>
+                <Button variant="danger" size="sm" onClick={handleDelete}>삭제</Button>
+              </div>
+            </div>
+          </Card>
+        );
+      }
+
+      return (
+        <Card className="p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1">
+              <Input type="password" value={inputKey} onChange={e => setInputKey(e.target.value)}
+                placeholder="fal.ai API 키를 입력하세요..." />
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleSave} disabled={!inputKey.trim()}>저장</Button>
+              {editing && <Button variant="ghost" onClick={() => setEditing(false)}>취소</Button>}
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-gray-500">
+            fal.ai에서 API 키를 발급받아 입력하세요. 키는 브라우저에 안전하게 저장됩니다.
+          </p>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // Style Preset Selector Component
+    // ========================================
+    function StyleSelector({ selected, onSelect }) {
+      return (
+        <div>
+          <h3 className="text-sm font-medium text-gray-400 mb-3">스타일 프리셋</h3>
+          <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
+            {STYLE_PRESETS.map(preset => {
+              const isActive = selected === preset.id;
+              return (
+                <button key={preset.id} onClick={() => onSelect(preset.id)}
+                  className={`style-card flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center
+                    ${isActive
+                      ? 'bg-violet-600/30 border-violet-500 shadow-lg shadow-violet-500/20'
+                      : 'bg-navy-900/50 border-gray-700/50 hover:border-gray-600 hover:bg-navy-800'}`}>
+                  <span className="text-2xl">{preset.icon}</span>
+                  <span className={`text-xs font-medium ${isActive ? 'text-violet-200' : 'text-gray-400'}`}>{preset.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Prompt Input & Generate Section
+    // ========================================
+    function PromptSection({ apiKey, onGenerated }) {
+      const [prompt, setPrompt] = useState('');
+      const [selectedStyle, setSelectedStyle] = useState('none');
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+
+      const handleGenerate = useCallback(async () => {
+        if (!prompt.trim() || !apiKey) return;
+        setLoading(true);
+        setError('');
+
+        const style = STYLE_PRESETS.find(s => s.id === selectedStyle);
+        const finalPrompt = style.suffix ? `${prompt.trim()}, ${style.suffix}` : prompt.trim();
+
+        try {
+          const res = await fetch('https://fal.run/fal-ai/flux/schnell', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Key ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              prompt: finalPrompt,
+              image_size: 'square_hd',
+              num_images: 1,
+              num_inference_steps: 4,
+            }),
+          });
+
+          if (!res.ok) {
+            const errBody = await res.text();
+            throw new Error(`API 오류 (${res.status}): ${errBody}`);
+          }
+
+          const data = await res.json();
+          const imageUrl = data.images?.[0]?.url;
+          if (!imageUrl) throw new Error('이미지 URL을 찾을 수 없습니다.');
+
+          onGenerated({
+            url: imageUrl,
+            prompt: prompt.trim(),
+            style: style.label,
+            timestamp: Date.now(),
+          });
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      }, [prompt, selectedStyle, apiKey, onGenerated]);
+
+      return (
+        <Card className="p-6 space-y-5">
+          <div>
+            <textarea value={prompt} onChange={e => setPrompt(e.target.value)}
+              placeholder="생성할 이미지를 설명하세요..."
+              rows={4}
+              disabled={loading}
+              className="w-full px-4 py-3 bg-navy-900 border border-gray-700 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none transition-all"
+            />
+          </div>
+
+          <StyleSelector selected={selectedStyle} onSelect={setSelectedStyle} />
+
+          {error && (
+            <div className="p-3 bg-red-900/30 border border-red-500/40 rounded-lg text-red-300 text-sm">
+              {error}
+            </div>
+          )}
+
+          <Button onClick={handleGenerate} size="lg"
+            disabled={loading || !prompt.trim() || !apiKey}
+            className={`w-full ${loading ? 'pulse-glow' : ''}`}>
+            {loading ? (
+              <span className="flex items-center justify-center gap-3">
+                <Spinner size="sm" />
+                이미지 생성 중...
+              </span>
+            ) : (
+              '이미지 생성'
+            )}
+          </Button>
+
+          {!apiKey && (
+            <p className="text-center text-sm text-yellow-400/80">API 키를 먼저 입력해주세요.</p>
+          )}
+        </Card>
+      );
+    }
+
+    // ========================================
+    // Gallery Image Card Component
+    // ========================================
+    function GalleryCard({ item, onClick }) {
+      const date = new Date(item.timestamp);
+      const timeStr = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+      return (
+        <div className="gallery-img cursor-pointer rounded-xl overflow-hidden border border-gray-700/50 bg-navy-800"
+          onClick={() => onClick(item)}>
+          <div className="aspect-square overflow-hidden">
+            <img src={item.url} alt={item.prompt} loading="lazy"
+              className="w-full h-full object-cover" />
+          </div>
+          <div className="p-3 space-y-2">
+            <p className="text-sm text-gray-300 line-clamp-2 leading-snug">{item.prompt}</p>
+            <div className="flex items-center justify-between">
+              <Badge>{item.style}</Badge>
+              <span className="text-xs text-gray-500">{timeStr}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Image Detail Modal Component
+    // ========================================
+    function ImageModal({ item, onClose }) {
+      const [copied, setCopied] = useState(false);
+
+      if (!item) return null;
+
+      const handleDownload = async () => {
+        try {
+          const res = await fetch(item.url);
+          const blob = await res.blob();
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `midjourney_${item.timestamp}.png`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        } catch {
+          window.open(item.url, '_blank');
+        }
+      };
+
+      const handleCopyPrompt = () => {
+        navigator.clipboard.writeText(item.prompt).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        });
+      };
+
+      const date = new Date(item.timestamp);
+      const timeStr = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+      return (
+        <Modal isOpen={true} onClose={onClose} size="xl">
+          <div className="relative">
+            <button onClick={onClose}
+              className="absolute top-3 right-3 z-10 w-10 h-10 flex items-center justify-center bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors text-xl"
+              aria-label="닫기">
+              &times;
+            </button>
+            <img src={item.url} alt={item.prompt} className="w-full rounded-t-2xl" />
+          </div>
+          <div className="p-6 space-y-4">
+            <div>
+              <p className="text-gray-200 leading-relaxed">{item.prompt}</p>
+              <div className="flex items-center gap-3 mt-2">
+                <Badge>{item.style}</Badge>
+                <span className="text-xs text-gray-500">{timeStr}</span>
+              </div>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button onClick={handleDownload} variant="primary" size="sm">다운로드</Button>
+              <Button onClick={handleCopyPrompt} variant="secondary" size="sm">
+                {copied ? '복사됨!' : '프롬프트 복사'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      );
+    }
+
+    // ========================================
+    // Gallery Section Component
+    // ========================================
+    function GallerySection({ gallery, onClear }) {
+      const [selectedItem, setSelectedItem] = useState(null);
+
+      if (gallery.length === 0) {
+        return (
+          <div className="text-center py-16">
+            <p className="text-4xl mb-3">🎨</p>
+            <p className="text-gray-500 text-lg">아직 생성된 이미지가 없습니다</p>
+            <p className="text-gray-600 text-sm mt-1">위에서 프롬프트를 입력하고 이미지를 생성해보세요</p>
+          </div>
+        );
+      }
+
+      return (
+        <div>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-xl font-bold text-gray-200">갤러리 <span className="text-sm font-normal text-gray-500 ml-2">{gallery.length}장</span></h2>
+            <Button variant="danger" size="sm" onClick={onClear}>갤러리 초기화</Button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {gallery.map(item => (
+              <GalleryCard key={item.timestamp} item={item} onClick={setSelectedItem} />
+            ))}
+          </div>
+          {selectedItem && <ImageModal item={selectedItem} onClose={() => setSelectedItem(null)} />}
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const [apiKey, setApiKey] = useState(() => localStorage.getItem('fal_api_key') || '');
+      const [gallery, setGallery] = useState(() => {
+        try {
+          return JSON.parse(localStorage.getItem('mj_gallery') || '[]');
+        } catch { return []; }
+      });
+
+      useEffect(() => {
+        localStorage.setItem('mj_gallery', JSON.stringify(gallery));
+      }, [gallery]);
+
+      const handleGenerated = useCallback((item) => {
+        setGallery(prev => [item, ...prev]);
+      }, []);
+
+      const handleClearGallery = useCallback(() => {
+        if (window.confirm('갤러리의 모든 이미지를 삭제하시겠습니까?')) {
+          setGallery([]);
+          localStorage.removeItem('mj_gallery');
+        }
+      }, []);
+
+      return (
+        <div className="min-h-screen">
+          {/* Header */}
+          <header className="border-b border-gray-800 bg-navy-950/80 backdrop-blur-md sticky top-0 z-40">
+            <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center text-xl shadow-lg shadow-violet-600/30">
+                  🎆
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-violet-300 to-purple-200 bg-clip-text text-transparent">
+                    마이 미드저니
+                  </h1>
+                  <p className="text-xs text-gray-500">AI 이미지 생성 서비스</p>
+                </div>
+              </div>
+              <span className="text-xs text-gray-600 hidden sm:block">Powered by fal.ai Flux Schnell</span>
+            </div>
+          </header>
+
+          {/* Main Content */}
+          <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+            <ApiKeySection apiKey={apiKey} setApiKey={setApiKey} />
+            <PromptSection apiKey={apiKey} onGenerated={handleGenerated} />
+            <GallerySection gallery={gallery} onClear={handleClearGallery} />
+          </main>
+
+          {/* Footer */}
+          <footer className="border-t border-gray-800 mt-12 py-6 text-center text-xs text-gray-600">
+            마이 미드저니 &copy; 2026 &mdash; fal.ai Flux Schnell API 기반
+          </footer>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

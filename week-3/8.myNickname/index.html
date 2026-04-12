@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>나만의 별명 생성기 - AI Nickname Generator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: {
+            surface: { 900: '#0f0a1a', 800: '#160f26', 700: '#1e1533', 600: '#281e40' },
+            accent: { 300: '#c4b5fd', 400: '#a78bfa', 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #0f0a1a 0%, #1a0e2e 50%, #0f0a1a 100%);
+      min-height: 100vh;
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3f3f5c; border-radius: 3px; }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in-up { animation: fadeInUp 0.4s ease-out both; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes pulse-border {
+      0%, 100% { border-color: rgba(139, 92, 246, 0.2); }
+      50% { border-color: rgba(139, 92, 246, 0.5); }
+    }
+    .pulse-border { animation: pulse-border 2s ease-in-out infinite; }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(20px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .toast-in { animation: toast-in 0.3s ease-out; }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .shimmer {
+      background: linear-gradient(90deg, #1e1533 25%, #281e40 50%, #1e1533 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+  </style>
+</head>
+<body class="font-sans text-gray-100">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+    // ========================================
+    // Constants
+    // ========================================
+
+    const MBTI_OPTIONS = [
+      '선택 안 함',
+      'INTJ', 'INTP', 'ENTJ', 'ENTP',
+      'INFJ', 'INFP', 'ENFJ', 'ENFP',
+      'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
+      'ISTP', 'ISFP', 'ESTP', 'ESFP',
+    ];
+
+    const LS_KEY_API = 'openai_api_key';
+
+    // ========================================
+    // Design System Components
+    // ========================================
+
+    function Button({ children, variant = 'primary', size = 'md', disabled, onClick, className = '', type = 'button', ...props }) {
+      const base = 'inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent-500/50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer';
+      const variants = {
+        primary: 'bg-gradient-to-r from-accent-600 to-purple-600 hover:from-accent-500 hover:to-purple-500 text-white shadow-lg shadow-accent-600/25 hover:shadow-accent-500/35',
+        secondary: 'bg-surface-600 hover:bg-surface-700 text-gray-200 border border-gray-700/50',
+        ghost: 'bg-transparent hover:bg-white/5 text-gray-300',
+        danger: 'bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/20',
+      };
+      const sizes = {
+        sm: 'px-3 py-1.5 text-xs gap-1.5',
+        md: 'px-5 py-2.5 text-sm gap-2',
+        lg: 'px-7 py-3.5 text-base gap-2',
+      };
+      return (
+        <button type={type} className={`${base} ${variants[variant]} ${sizes[size]} ${className}`} disabled={disabled} onClick={onClick} {...props}>
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ label, value, onChange, placeholder, type = 'text', error, disabled, required, className = '', ...props }) {
+      return (
+        <div className={`space-y-1.5 ${className}`}>
+          {label && (
+            <label className="block text-sm font-medium text-gray-300">
+              {label}
+              {required && <span className="text-accent-400 ml-1">*</span>}
+            </label>
+          )}
+          <input
+            type={type}
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            disabled={disabled}
+            className={`w-full bg-surface-700/80 border rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500 transition-all duration-200 ${error ? 'border-red-500/50' : 'border-gray-700/50'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            {...props}
+          />
+          {error && <p className="text-xs text-red-400">{error}</p>}
+        </div>
+      );
+    }
+
+    function Select({ label, value, onChange, options, className = '' }) {
+      return (
+        <div className={`space-y-1.5 ${className}`}>
+          {label && <label className="block text-sm font-medium text-gray-300">{label}</label>}
+          <select
+            value={value}
+            onChange={onChange}
+            className="w-full bg-surface-700/80 border border-gray-700/50 rounded-xl px-4 py-2.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500 transition-all duration-200 cursor-pointer appearance-none"
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+          >
+            {options.map(opt => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`bg-surface-800/80 backdrop-blur-sm border border-gray-800/60 rounded-2xl overflow-hidden ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Spinner({ size = 'md' }) {
+      const sizes = { sm: 'w-4 h-4', md: 'w-6 h-6', lg: 'w-10 h-10' };
+      return (
+        <svg className={`${sizes[size]} spin text-accent-400`} fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      );
+    }
+
+    // ========================================
+    // Toast Notification Component
+    // ========================================
+
+    function Toast({ message, show, onHide }) {
+      useEffect(() => {
+        if (show) {
+          const t = setTimeout(onHide, 2500);
+          return () => clearTimeout(t);
+        }
+      }, [show, onHide]);
+
+      if (!show) return null;
+      return (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 toast-in">
+          <div className="bg-surface-600 border border-accent-500/30 text-gray-100 px-5 py-3 rounded-xl shadow-2xl shadow-black/40 flex items-center gap-2 text-sm font-medium">
+            <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+            {message}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // API Key Management Component
+    // ========================================
+
+    function ApiKeySection({ apiKey, setApiKey }) {
+      const [editing, setEditing] = useState(!apiKey);
+      const [showKey, setShowKey] = useState(false);
+      const [tempKey, setTempKey] = useState(apiKey);
+
+      const maskKey = (key) => {
+        if (!key || key.length < 8) return '****';
+        return key.substring(0, 5) + '...' + key.substring(key.length - 4);
+      };
+
+      const handleSave = () => {
+        const trimmed = tempKey.trim();
+        if (trimmed) {
+          setApiKey(trimmed);
+          localStorage.setItem(LS_KEY_API, trimmed);
+          setEditing(false);
+          setShowKey(false);
+        }
+      };
+
+      const handleDelete = () => {
+        setApiKey('');
+        setTempKey('');
+        localStorage.removeItem(LS_KEY_API);
+        setEditing(true);
+        setShowKey(false);
+      };
+
+      const handleEdit = () => {
+        setTempKey(apiKey);
+        setEditing(true);
+      };
+
+      return (
+        <Card className="p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="w-5 h-5 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+            <h3 className="text-sm font-semibold text-gray-200">OpenAI API Key</h3>
+            {apiKey && !editing && (
+              <span className="ml-auto flex items-center gap-1.5 text-xs text-green-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                연결됨
+              </span>
+            )}
+          </div>
+
+          {editing ? (
+            <div className="space-y-3">
+              <div className="relative">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={tempKey}
+                  onChange={e => setTempKey(e.target.value)}
+                  placeholder="sk-... 형식의 API Key를 입력하세요"
+                  className="w-full bg-surface-700/80 border border-gray-700/50 rounded-xl px-4 py-2.5 pr-10 text-sm text-gray-100 placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500 font-mono transition-all duration-200"
+                  onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
+                />
+                <button
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                  aria-label={showKey ? '숨기기' : '보기'}
+                >
+                  {showKey ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  )}
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleSave} disabled={!tempKey.trim()}>저장</Button>
+                {apiKey && <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setTempKey(apiKey); }}>취소</Button>}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <code className="text-sm text-gray-400 font-mono bg-surface-700/50 px-3 py-1.5 rounded-lg flex-1 truncate">
+                {maskKey(apiKey)}
+              </code>
+              <Button size="sm" variant="ghost" onClick={handleEdit}>수정</Button>
+              <Button size="sm" variant="danger" onClick={handleDelete}>삭제</Button>
+            </div>
+          )}
+          <p className="text-xs text-gray-600 mt-3">
+            API Key는 브라우저 localStorage에만 저장되며 외부로 전송되지 않습니다.
+          </p>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // Nickname Form Component
+    // ========================================
+
+    function NicknameForm({ onGenerate, loading, apiKey }) {
+      const [name, setName] = useState('');
+      const [personality, setPersonality] = useState('');
+      const [hobby, setHobby] = useState('');
+      const [mbti, setMbti] = useState('선택 안 함');
+      const [job, setJob] = useState('');
+      const [count, setCount] = useState(5);
+
+      const canSubmit = name.trim() && personality.trim() && hobby.trim() && apiKey && !loading;
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!canSubmit) return;
+        onGenerate({ name: name.trim(), personality: personality.trim(), hobby: hobby.trim(), mbti: mbti === '선택 안 함' ? null : mbti, job: job.trim() || null, count });
+      };
+
+      return (
+        <Card className="p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <span className="text-2xl">&#9997;&#65039;</span>
+            <h2 className="text-lg font-bold text-gray-100">프로필 입력</h2>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="이름"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="예: 홍길동"
+                required
+              />
+              <Input
+                label="성격"
+                value={personality}
+                onChange={e => setPersonality(e.target.value)}
+                placeholder="예: 활발한, 조용한, 유머러스한"
+                required
+              />
+              <Input
+                label="취미"
+                value={hobby}
+                onChange={e => setHobby(e.target.value)}
+                placeholder="예: 독서, 게임, 요리"
+                required
+              />
+              <Select
+                label="MBTI (선택)"
+                value={mbti}
+                onChange={e => setMbti(e.target.value)}
+                options={MBTI_OPTIONS}
+              />
+              <Input
+                label="직업 (선택)"
+                value={job}
+                onChange={e => setJob(e.target.value)}
+                placeholder="예: 개발자, 교사, 디자이너"
+              />
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-gray-300">별명 개수</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min="3"
+                    max="10"
+                    value={count}
+                    onChange={e => setCount(Number(e.target.value))}
+                    className="flex-1 h-2 bg-surface-700 rounded-lg appearance-none cursor-pointer accent-accent-500"
+                  />
+                  <span className="text-sm font-bold text-accent-400 w-6 text-center">{count}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <Button type="submit" size="lg" disabled={!canSubmit} className="w-full sm:w-auto">
+                {loading ? (
+                  <>
+                    <Spinner size="sm" />
+                    별명 생성 중...
+                  </>
+                ) : (
+                  <>
+                    <span className="text-lg">&#10024;</span>
+                    별명 생성하기
+                  </>
+                )}
+              </Button>
+              {!apiKey && (
+                <p className="text-xs text-amber-400/80 mt-2">API Key를 먼저 입력해주세요.</p>
+              )}
+            </div>
+          </form>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // Nickname Card Component
+    // ========================================
+
+    function NicknameCard({ nickname, explanation, index, onCopy, onFavorite, isFavorite }) {
+      return (
+        <div
+          className="fade-in-up group relative bg-surface-800/60 backdrop-blur-sm border border-gray-800/50 rounded-2xl p-5 hover:border-accent-500/30 hover:shadow-lg hover:shadow-accent-600/5 transition-all duration-300"
+          style={{ animationDelay: `${index * 80}ms` }}
+        >
+          {/* Favorite badge */}
+          {isFavorite && (
+            <div className="absolute top-3 right-3">
+              <span className="text-pink-400 text-sm">&#9829;</span>
+            </div>
+          )}
+
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-500/30 to-purple-600/30 border border-accent-500/20 flex items-center justify-center text-accent-300 font-bold text-sm shrink-0">
+              {index + 1}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-xl font-bold text-gray-50 mb-1.5 break-words">{nickname}</h3>
+              <p className="text-sm text-gray-400 leading-relaxed">{explanation}</p>
+            </div>
+          </div>
+
+          <div className="flex gap-2 mt-4 justify-end">
+            <button
+              onClick={onFavorite}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1.5 ${
+                isFavorite
+                  ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30'
+                  : 'bg-surface-700/50 text-gray-500 hover:text-pink-400 hover:bg-pink-500/10 border border-gray-700/30'
+              }`}
+              aria-label={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
+            >
+              <span>{isFavorite ? '\u2665' : '\u2661'}</span>
+              {isFavorite ? '선택됨' : '즐겨찾기'}
+            </button>
+            <button
+              onClick={onCopy}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-700/50 text-gray-500 hover:text-accent-400 hover:bg-accent-500/10 border border-gray-700/30 transition-all duration-200 flex items-center gap-1.5"
+              aria-label="클립보드에 복사"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+              복사
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Loading Skeleton Component
+    // ========================================
+
+    function LoadingSkeleton({ count }) {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 mb-6">
+            <Spinner size="lg" />
+            <div>
+              <p className="text-sm font-semibold text-gray-200">별명을 생성하고 있어요...</p>
+              <p className="text-xs text-gray-500">AI가 창의적인 별명을 고민 중입니다</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Array.from({ length: count }, (_, i) => (
+              <div key={i} className="bg-surface-800/60 border border-gray-800/50 rounded-2xl p-5">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl shimmer shrink-0" />
+                  <div className="flex-1 space-y-3">
+                    <div className="h-6 w-32 shimmer rounded-lg" />
+                    <div className="h-4 w-full shimmer rounded" />
+                    <div className="h-4 w-2/3 shimmer rounded" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Results Section Component
+    // ========================================
+
+    function ResultsSection({ results, favorites, toggleFavorite, onCopy }) {
+      if (!results || results.length === 0) return null;
+
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">&#127881;</span>
+            <h2 className="text-lg font-bold text-gray-100">생성된 별명</h2>
+            <span className="text-sm text-gray-500">({results.length}개)</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {results.map((item, idx) => (
+              <NicknameCard
+                key={idx}
+                nickname={item.nickname}
+                explanation={item.explanation}
+                index={idx}
+                onCopy={() => onCopy(item.nickname)}
+                onFavorite={() => toggleFavorite(idx)}
+                isFavorite={favorites.has(idx)}
+              />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+
+    function App() {
+      const [apiKey, setApiKey] = useState(() => localStorage.getItem(LS_KEY_API) || '');
+      const [results, setResults] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [favorites, setFavorites] = useState(new Set());
+      const [toast, setToast] = useState({ show: false, message: '' });
+      const [requestCount, setRequestCount] = useState(5);
+      const resultsRef = useRef(null);
+
+      const showToast = useCallback((message) => {
+        setToast({ show: true, message });
+      }, []);
+
+      const hideToast = useCallback(() => {
+        setToast({ show: false, message: '' });
+      }, []);
+
+      const handleCopy = useCallback((text) => {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast('클립보드에 복사되었습니다!');
+        }).catch(() => {
+          showToast('복사에 실패했습니다.');
+        });
+      }, [showToast]);
+
+      const toggleFavorite = useCallback((idx) => {
+        setFavorites(prev => {
+          const next = new Set(prev);
+          if (next.has(idx)) next.delete(idx);
+          else next.add(idx);
+          return next;
+        });
+      }, []);
+
+      const buildPrompt = useCallback(({ name, personality, hobby, mbti, job, count }) => {
+        let desc = `이름: ${name}\n성격: ${personality}\n취미: ${hobby}`;
+        if (mbti) desc += `\nMBTI: ${mbti}`;
+        if (job) desc += `\n직업: ${job}`;
+
+        return `당신은 창의적이고 재미있는 별명을 만들어주는 전문가입니다.
+
+다음 사람의 정보를 바탕으로 재미있고 창의적인 한국어 별명을 ${count}개 만들어주세요.
+
+${desc}
+
+별명은 다음 조건을 충족해야 합니다:
+- 한국어로 된 재미있고 기억에 남는 별명
+- 그 사람의 성격, 취미, 또는 특성을 반영할 것
+- 부정적이거나 모욕적이지 않을 것
+- 각 별명마다 왜 이 별명이 어울리는지 짧은 설명 포함
+
+반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
+[
+  { "nickname": "별명1", "explanation": "이 별명이 어울리는 이유" },
+  { "nickname": "별명2", "explanation": "이 별명이 어울리는 이유" }
+]`;
+      }, []);
+
+      const handleGenerate = useCallback(async (formData) => {
+        setError(null);
+        setLoading(true);
+        setResults([]);
+        setFavorites(new Set());
+        setRequestCount(formData.count);
+
+        try {
+          const prompt = buildPrompt(formData);
+          const res = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [
+                { role: 'system', content: '당신은 창의적인 한국어 별명 생성 전문가입니다. 반드시 유효한 JSON 배열로만 응답하세요.' },
+                { role: 'user', content: prompt },
+              ],
+              temperature: 0.9,
+              max_tokens: 2000,
+            }),
+          });
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            if (res.status === 401) throw new Error('API Key가 유효하지 않습니다. 올바른 키를 입력해주세요.');
+            if (res.status === 429) throw new Error('요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.');
+            throw new Error(errData.error?.message || `API 오류가 발생했습니다 (${res.status})`);
+          }
+
+          const data = await res.json();
+          const content = data.choices?.[0]?.message?.content;
+
+          if (!content) throw new Error('AI로부터 응답을 받지 못했습니다.');
+
+          // Parse JSON from the response
+          let parsed;
+          try {
+            // Try to extract JSON array from the response
+            const jsonMatch = content.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              parsed = JSON.parse(jsonMatch[0]);
+            } else {
+              parsed = JSON.parse(content);
+            }
+          } catch (parseErr) {
+            throw new Error('AI 응답을 파싱하는데 실패했습니다. 다시 시도해주세요.');
+          }
+
+          if (!Array.isArray(parsed) || parsed.length === 0) {
+            throw new Error('유효한 별명 데이터를 받지 못했습니다. 다시 시도해주세요.');
+          }
+
+          setResults(parsed);
+
+          // Scroll to results
+          setTimeout(() => {
+            resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 200);
+
+        } catch (err) {
+          setError(err.message || '별명 생성 중 오류가 발생했습니다.');
+        } finally {
+          setLoading(false);
+        }
+      }, [apiKey, buildPrompt]);
+
+      return (
+        <div className="min-h-screen">
+          {/* Header */}
+          <header className="sticky top-0 z-40 bg-surface-900/70 backdrop-blur-xl border-b border-gray-800/40">
+            <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-500 to-purple-600 flex items-center justify-center shadow-lg shadow-accent-600/25 text-xl">
+                &#9733;
+              </div>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-accent-300 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  나만의 별명 생성기
+                </h1>
+                <p className="text-xs text-gray-500">AI가 만들어주는 나만의 특별한 별명</p>
+              </div>
+            </div>
+          </header>
+
+          {/* Main Content */}
+          <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+            {/* API Key Section */}
+            <ApiKeySection apiKey={apiKey} setApiKey={setApiKey} />
+
+            {/* Form Section */}
+            <NicknameForm onGenerate={handleGenerate} loading={loading} apiKey={apiKey} />
+
+            {/* Error Display */}
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-2xl px-5 py-4 flex items-start gap-3 fade-in-up">
+                <svg className="w-5 h-5 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-300">오류가 발생했습니다</p>
+                  <p className="text-sm text-red-400/80 mt-1">{error}</p>
+                </div>
+                <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300 transition-colors shrink-0">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            )}
+
+            {/* Loading State */}
+            {loading && <LoadingSkeleton count={requestCount} />}
+
+            {/* Results */}
+            <div ref={resultsRef}>
+              <ResultsSection
+                results={results}
+                favorites={favorites}
+                toggleFavorite={toggleFavorite}
+                onCopy={handleCopy}
+              />
+            </div>
+
+            {/* Empty State - only when no results and not loading */}
+            {!loading && results.length === 0 && !error && (
+              <div className="text-center py-16">
+                <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-surface-700/50 border border-gray-800/50 flex items-center justify-center text-4xl">
+                  &#128171;
+                </div>
+                <h3 className="text-lg font-semibold text-gray-400 mb-2">별명을 만들어 볼까요?</h3>
+                <p className="text-sm text-gray-600 max-w-md mx-auto leading-relaxed">
+                  위에 이름, 성격, 취미를 입력하면<br />
+                  AI가 재미있고 창의적인 별명을 만들어 드려요
+                </p>
+                <div className="mt-6 flex flex-wrap gap-2 justify-center">
+                  {['웃음대마왕', '취미부자', '분위기메이커', '아이디어뱅크'].map(s => (
+                    <span key={s} className="px-3 py-1.5 bg-surface-700/50 rounded-full text-xs text-gray-500 border border-gray-800/40">{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* Footer */}
+          <footer className="text-center py-8 text-xs text-gray-700">
+            Powered by OpenAI GPT-4o-mini
+          </footer>
+
+          {/* Toast */}
+          <Toast message={toast.message} show={toast.show} onHide={hideToast} />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Render
+    // ========================================
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
