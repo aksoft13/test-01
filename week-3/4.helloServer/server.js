@@ -15,13 +15,16 @@ let users = [
   { id: 3, name: 'Carol Park', email: 'carol@example.com' },
 ];
 let nextUserId = 4;
+const serverStartedAt = new Date().toISOString();
+let totalRequests = 0;
 
 // 4. Middleware
 app.use(express.json());
 
-// Request logger
+// Request logger + counter
 app.use((req, _res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  totalRequests++;
+  console.log(`[${new Date().toISOString()}] #${totalRequests} ${req.method} ${req.url}`);
   next();
 });
 
@@ -56,6 +59,18 @@ app.get('/api/users', (_req, res) => {
   res.json({ success: true, data: users });
 });
 
+// ---- GET /api/users/search?name=xxx ----
+// NOTE: must be declared BEFORE /api/users/:id to avoid "search" being captured as :id
+app.get('/api/users/search', (req, res) => {
+  const { name } = req.query;
+  if (!name) {
+    return res.status(400).json({ success: false, message: 'Query parameter "name" is required' });
+  }
+  const keyword = name.toLowerCase();
+  const results = users.filter((u) => u.name.toLowerCase().includes(keyword));
+  res.json({ success: true, data: results });
+});
+
 // ---- GET /api/users/:id ----
 app.get('/api/users/:id', (req, res) => {
   const id = Number(req.params.id);
@@ -87,6 +102,32 @@ app.post('/api/users', (req, res) => {
   }
 });
 
+// ---- PUT /api/users/:id ----
+app.put('/api/users/:id', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid user id' });
+    }
+    const user = users.find((u) => u.id === id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const { name, email } = req.body || {};
+    if (!name && !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one of "name" or "email" is required',
+      });
+    }
+    if (name) user.name = String(name);
+    if (email) user.email = String(email);
+    res.json({ success: true, data: user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to update user' });
+  }
+});
+
 // ---- DELETE /api/users/:id ----
 app.delete('/api/users/:id', (req, res) => {
   const id = Number(req.params.id);
@@ -99,6 +140,24 @@ app.delete('/api/users/:id', (req, res) => {
     return res.status(404).json({ success: false, message: 'User not found' });
   }
   res.json({ success: true, message: `User ${id} deleted` });
+});
+
+// ---- GET /api/stats ----
+app.get('/api/stats', (_req, res) => {
+  res.json({
+    success: true,
+    data: {
+      totalUsers: users.length,
+      serverStartedAt,
+      uptime: process.uptime(),
+      totalRequests,
+    },
+  });
+});
+
+// ---- POST /api/echo ----
+app.post('/api/echo', (req, res) => {
+  res.json({ success: true, data: req.body });
 });
 
 // 6. Error handling middleware

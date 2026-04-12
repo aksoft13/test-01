@@ -15,6 +15,16 @@ const pokemonByIdCache = new Map();
 // Cached list of the original 151 pokemon (id + name)
 let pokemonListCache = null;
 
+// Fixed random ids — picked once at startup, never changes
+const fixedRandomIds = (() => {
+  const ids = new Set();
+  while (ids.size < 5) {
+    ids.add(Math.floor(Math.random() * 151) + 1);
+  }
+  return Array.from(ids);
+})();
+console.log('[server] fixed random pokemon ids:', fixedRandomIds);
+
 // ---------- Middleware ----------
 app.use(express.json());
 app.use(express.static(__dirname));
@@ -118,14 +128,8 @@ app.get('/api/pokemon/random', async (req, res) => {
     const count = Number.isFinite(countRaw) && countRaw > 0 ? countRaw : 5;
     const safeCount = Math.min(count, 151);
 
-    // Pick unique random ids in 1..151
-    const ids = new Set();
-    while (ids.size < safeCount) {
-      ids.add(Math.floor(Math.random() * 151) + 1);
-    }
-
     const results = await Promise.all(
-      Array.from(ids).map((id) => fetchPokemon(id))
+      fixedRandomIds.slice(0, safeCount).map((id) => fetchPokemon(id))
     );
 
     res.json({ success: true, data: results });
