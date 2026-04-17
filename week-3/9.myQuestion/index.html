@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>나만의 수업 질문 AI 에이전트</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="config.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @keyframes dotPulse {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+      40% { opacity: 1; transform: scale(1); }
+    }
+    .dot-animation span:nth-child(1) { animation: dotPulse 1.4s infinite 0s; }
+    .dot-animation span:nth-child(2) { animation: dotPulse 1.4s infinite 0.2s; }
+    .dot-animation span:nth-child(3) { animation: dotPulse 1.4s infinite 0.4s; }
+    .dot-animation span {
+      display: inline-block;
+      width: 8px; height: 8px;
+      margin: 0 2px;
+      background: #6366f1;
+      border-radius: 50%;
+    }
+    .note-item:hover { background: #f1f5f9; }
+    .note-item.active { background: #eef2ff; border-left: 3px solid #4f46e5; }
+    textarea:focus, input:focus { outline: none; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3); }
+    .chat-container { scroll-behavior: smooth; }
+    pre code { white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+<body class="bg-slate-50 h-screen overflow-hidden">
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks Destructuring
+    // ========================================
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+    // ========================================
+    // Utility: localStorage helpers
+    // ========================================
+    function loadFromStorage(key, fallback) {
+      try {
+        const stored = localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function saveToStorage(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch (e) {
+        console.warn('localStorage save failed:', e);
+      }
+    }
+
+    // ========================================
+    // Utility: Simple Markdown Renderer
+    // ========================================
+    function renderMarkdown(text) {
+      if (!text) return '';
+      let html = text;
+
+      // Code blocks (```lang\n...\n```)
+      html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+        const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return `<pre class="bg-gray-900 text-green-300 rounded-lg p-4 my-2 overflow-x-auto text-sm"><code>${escaped}</code></pre>`;
+      });
+
+      // Inline code
+      html = html.replace(/`([^`]+)`/g, '<code class="bg-gray-100 text-indigo-700 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>');
+
+      // Headers
+      html = html.replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold mt-3 mb-1">$1</h3>');
+      html = html.replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold mt-3 mb-1">$1</h2>');
+      html = html.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold mt-3 mb-1">$1</h1>');
+
+      // Bold and italic
+      html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+      // Unordered lists
+      html = html.replace(/^[\-\*] (.+)$/gm, '<li class="ml-4 list-disc">$1</li>');
+      html = html.replace(/(<li[^>]*>.*<\/li>\n?)+/g, (match) => `<ul class="my-1">${match}</ul>`);
+
+      // Ordered lists
+      html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>');
+
+      // Line breaks (but not inside pre blocks)
+      html = html.replace(/\n/g, '<br/>');
+      // Clean up extra <br/> after block elements
+      html = html.replace(/<\/(pre|ul|ol|h[1-3]|li)><br\/>/g, '</$1>');
+      html = html.replace(/<br\/><(pre|ul|ol|h[1-3])/g, '<$1');
+
+      return html;
+    }
+
+    // ========================================
+    // Utility: Generate unique ID
+    // ========================================
+    function generateId() {
+      return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+    }
+
+    function getTodayDate() {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    // ========================================
+    // API: Send message to Claude
+    // ========================================
+    async function sendMessageToAPI(systemPrompt, conversationHistory) {
+      const apiKey = window.ANTHROPIC_API_KEY;
+      if (!apiKey || apiKey === 'your-api-key-here') {
+        throw { type: 'auth', message: 'API 키가 설정되지 않았습니다. config.js를 확인해주세요.' };
+      }
+
+      let response;
+      try {
+        response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: 'claude-opus-4-6',
+            max_tokens: 2048,
+            system: systemPrompt,
+            messages: conversationHistory
+          })
+        });
+      } catch (e) {
+        throw { type: 'network', message: '네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.' };
+      }
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          throw { type: 'unknown', message: `HTTP ${response.status} 오류가 발생했습니다.` };
+        }
+
+        const errorMessage = errorData.error?.message || '';
+        const errorType = errorData.error?.type || '';
+
+        if (response.status === 401 || errorType === 'authentication_error') {
+          throw { type: 'auth', message: 'API 키가 올바르지 않습니다. config.js를 확인해주세요.' };
+        }
+        if (response.status === 429 || errorMessage.toLowerCase().includes('credit') || errorMessage.toLowerCase().includes('billing')) {
+          throw { type: 'credit', message: 'API 오류: 크레딧이 부족합니다. console.anthropic.com에서 충전해주세요.' };
+        }
+        throw { type: 'api', message: errorData.error?.message || `HTTP ${response.status} 오류가 발생했습니다.` };
+      }
+
+      const data = await response.json();
+      return data.content[0].text;
+    }
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Button({ children, variant = 'primary', size = 'md', disabled = false, onClick, className = '', type = 'button' }) {
+      const base = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed';
+      const variants = {
+        primary: 'bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500',
+        secondary: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-indigo-500',
+        danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
+        ghost: 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:ring-indigo-500',
+      };
+      const sizes = {
+        sm: 'px-2.5 py-1.5 text-xs',
+        md: 'px-4 py-2 text-sm',
+        lg: 'px-6 py-3 text-base',
+      };
+      return (
+        <button
+          type={type}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function LoadingDots() {
+      return (
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 text-sm">AI</div>
+          <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+            <div className="dot-animation flex items-center gap-1 h-5">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Notes Panel Component
+    // ========================================
+    function NotesPanel({ notes, selectedNoteId, onSelectNote, onAddNote, onDeleteNote, onUpdateNote }) {
+      const selectedNote = notes.find(n => n.id === selectedNoteId);
+      const contentRef = useRef(null);
+      const fileInputRef = useRef(null);
+
+      const handleAdd = () => {
+        const newNote = {
+          id: generateId(),
+          date: getTodayDate(),
+          title: getTodayDate(),
+          content: ''
+        };
+        onAddNote(newNote);
+      };
+
+      const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const title = file.name.replace(/\.md$/i, '');
+          const newNote = {
+            id: generateId(),
+            date: getTodayDate(),
+            title,
+            content: ev.target.result
+          };
+          onAddNote(newNote);
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+      };
+
+      useEffect(() => {
+        if (selectedNote && contentRef.current) {
+          contentRef.current.focus();
+        }
+      }, [selectedNoteId]);
+
+      return (
+        <div className="flex flex-col h-full bg-white border-r border-gray-200">
+          {/* Header */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                <span>📋</span> 수업 노트
+                <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                  {notes.length}
+                </span>
+              </h2>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="primary" size="sm" className="flex-1" onClick={handleAdd}>
+                + 새 노트
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => fileInputRef.current.click()} title="Notion에서 Export한 .md 파일 불러오기">
+                📂 MD
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".md,.txt"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+            </div>
+          </div>
+
+          {/* Note list */}
+          <div className="flex-1 overflow-y-auto p-2 min-h-0">
+            {notes.length === 0 && (
+              <div className="text-center text-gray-400 text-sm py-8">
+                노트가 없습니다.<br/>새 노트를 추가해보세요.
+              </div>
+            )}
+            {notes.map(note => (
+              <div
+                key={note.id}
+                className={`note-item flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer mb-1 transition-colors ${
+                  note.id === selectedNoteId ? 'active' : ''
+                }`}
+                onClick={() => onSelectNote(note.id)}
+              >
+                <span className="text-sm flex-shrink-0">📝</span>
+                <span className="flex-1 text-sm text-gray-700 truncate">
+                  {note.date} - {note.title}
+                </span>
+                <button
+                  className="flex-shrink-0 text-gray-400 hover:text-indigo-600 p-1 rounded transition-colors"
+                  title="편집"
+                  onClick={(e) => { e.stopPropagation(); onSelectNote(note.id); }}
+                >
+                  ✏️
+                </button>
+                <button
+                  className="flex-shrink-0 text-gray-400 hover:text-red-600 p-1 rounded transition-colors"
+                  title="삭제"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`"${note.title}" 노트를 삭제하시겠습니까?`)) {
+                      onDeleteNote(note.id);
+                    }
+                  }}
+                >
+                  🗑️
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Editor area */}
+          {selectedNote && (
+            <div className="border-t border-gray-200 p-3 flex flex-col gap-2 bg-gray-50" style={{ minHeight: '220px' }}>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">선택된 노트 편집</label>
+              <input
+                type="text"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                placeholder="제목"
+                value={selectedNote.title}
+                onChange={(e) => onUpdateNote(selectedNote.id, { title: e.target.value })}
+              />
+              <textarea
+                ref={contentRef}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 resize-none bg-white"
+                placeholder="노트 내용을 입력하세요..."
+                value={selectedNote.content}
+                onChange={(e) => onUpdateNote(selectedNote.id, { content: e.target.value })}
+              />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Chat Panel Component
+    // ========================================
+    function ChatPanel({ messages, isLoading, onSend, onReset }) {
+      const [inputText, setInputText] = useState('');
+      const chatEndRef = useRef(null);
+      const textareaRef = useRef(null);
+
+      useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [messages, isLoading]);
+
+      const handleSend = () => {
+        const trimmed = inputText.trim();
+        if (!trimmed || isLoading) return;
+        onSend(trimmed);
+        setInputText('');
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          handleSend();
+        }
+      };
+
+      const handleInput = (e) => {
+        setInputText(e.target.value);
+        e.target.style.height = 'auto';
+        e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+      };
+
+      return (
+        <div className="flex flex-col h-full bg-slate-50">
+          {/* Chat header */}
+          <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-200">
+            <h2 className="text-base font-bold text-gray-800 flex items-center gap-2">
+              <span>💬</span> 대화
+            </h2>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                if (messages.length <= 1 || window.confirm('모든 대화 내용이 삭제됩니다. 초기화하시겠습니까?')) {
+                  onReset();
+                }
+              }}
+            >
+              대화 초기화
+            </Button>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-5 py-4 chat-container min-h-0">
+            {messages.map((msg, i) => {
+              if (msg.role === 'welcome') {
+                return (
+                  <div key={i} className="flex items-start gap-3 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 text-sm">AI</div>
+                    <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm max-w-[80%]">
+                      <p className="text-sm text-gray-700 leading-relaxed">{msg.content}</p>
+                    </div>
+                  </div>
+                );
+              }
+              if (msg.role === 'error') {
+                return (
+                  <div key={i} className="flex items-start gap-3 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 text-sm">!</div>
+                    <div className="bg-red-50 border border-red-200 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[80%]">
+                      <p className="text-sm text-red-700 leading-relaxed">❌ {msg.content}</p>
+                    </div>
+                  </div>
+                );
+              }
+              if (msg.role === 'user') {
+                return (
+                  <div key={i} className="flex justify-end mb-4">
+                    <div className="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-[80%] shadow-sm">
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+                  </div>
+                );
+              }
+              if (msg.role === 'assistant') {
+                return (
+                  <div key={i} className="flex items-start gap-3 mb-4">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 text-sm">AI</div>
+                    <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm max-w-[80%]">
+                      <div
+                        className="text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                      />
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })}
+            {isLoading && <LoadingDots />}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Input area */}
+          <div className="px-5 py-3 bg-white border-t border-gray-200">
+            <div className="flex items-end gap-2">
+              <textarea
+                ref={textareaRef}
+                className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm resize-none"
+                placeholder="질문을 입력하세요... (Enter: 전송, Shift+Enter: 줄바꿈)"
+                rows={1}
+                value={inputText}
+                onChange={handleInput}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
+              />
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleSend}
+                disabled={isLoading || !inputText.trim()}
+                className="flex-shrink-0 px-5 py-2.5"
+              >
+                전송
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App Component
+    // ========================================
+    const WELCOME_MESSAGE = {
+      role: 'welcome',
+      content: '안녕하세요! 수업 내용에 대해 궁금한 점이 있으면 편하게 질문해주세요. 왼쪽에 수업 노트를 추가하면 더 정확한 답변을 드릴 수 있습니다.'
+    };
+
+    function App() {
+      const [notes, setNotes] = useState(() => loadFromStorage('app-notes', []));
+      const [selectedNoteId, setSelectedNoteId] = useState(null);
+      const [messages, setMessages] = useState(() => {
+        const stored = loadFromStorage('app-messages', null);
+        return stored && stored.length > 0 ? stored : [WELCOME_MESSAGE];
+      });
+      const [isLoading, setIsLoading] = useState(false);
+
+      // Persist notes
+      useEffect(() => {
+        saveToStorage('app-notes', notes);
+      }, [notes]);
+
+      // Persist messages
+      useEffect(() => {
+        saveToStorage('app-messages', messages);
+      }, [messages]);
+
+      // Build system prompt from all notes
+      const systemPrompt = useMemo(() => {
+        const notesContent = notes.length > 0
+          ? notes.map(n => `[${n.date} - ${n.title}]\n${n.content}`).join('\n\n')
+          : '등록된 노트가 없습니다';
+
+        return `당신은 학생의 수업 내용을 도와주는 개인 AI 학습 도우미입니다.
+
+[수업 노트]
+${notesContent}
+
+위 수업 자료를 참고하여 학생의 질문에 정확하고 친절하게 답변해주세요.
+이전 대화 맥락을 활용하여 연속적인 질문에도 자연스럽게 답변하세요.
+코드를 설명할 때는 마크다운 코드 블록을 사용하세요.
+한국어로 답변해주세요.`;
+      }, [notes]);
+
+      // Build conversation history for API (only user/assistant messages)
+      const conversationHistory = useMemo(() => {
+        return messages
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({ role: m.role, content: m.content }));
+      }, [messages]);
+
+      const handleSend = useCallback(async (text) => {
+        const userMessage = { role: 'user', content: text };
+        setMessages(prev => [...prev, userMessage]);
+        setIsLoading(true);
+
+        try {
+          const history = [...conversationHistory, { role: 'user', content: text }];
+          const reply = await sendMessageToAPI(systemPrompt, history);
+          setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+        } catch (err) {
+          let errorText;
+          if (err.type === 'auth') {
+            errorText = err.message;
+          } else if (err.type === 'credit') {
+            errorText = err.message;
+          } else if (err.type === 'network') {
+            errorText = err.message;
+          } else {
+            errorText = err.message || '알 수 없는 오류가 발생했습니다.';
+          }
+          setMessages(prev => [...prev, { role: 'error', content: errorText }]);
+        } finally {
+          setIsLoading(false);
+        }
+      }, [systemPrompt, conversationHistory]);
+
+      const handleReset = useCallback(() => {
+        setMessages([WELCOME_MESSAGE]);
+      }, []);
+
+      const handleAddNote = useCallback((newNote) => {
+        setNotes(prev => [newNote, ...prev]);
+        setSelectedNoteId(newNote.id);
+      }, []);
+
+      const handleDeleteNote = useCallback((id) => {
+        setNotes(prev => prev.filter(n => n.id !== id));
+        setSelectedNoteId(prev => prev === id ? null : prev);
+      }, []);
+
+      const handleUpdateNote = useCallback((id, updates) => {
+        setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
+      }, []);
+
+      return (
+        <div className="h-screen flex flex-col">
+          {/* Top bar */}
+          <header className="bg-indigo-600 text-white px-6 py-3 flex items-center gap-3 flex-shrink-0 shadow-md">
+            <span className="text-xl">📚</span>
+            <h1 className="text-lg font-bold">나만의 수업 질문 AI 에이전트</h1>
+          </header>
+
+          {/* Main content */}
+          <div className="flex flex-1 min-h-0">
+            {/* Left sidebar - Notes */}
+            <div className="w-80 flex-shrink-0 min-h-0">
+              <NotesPanel
+                notes={notes}
+                selectedNoteId={selectedNoteId}
+                onSelectNote={setSelectedNoteId}
+                onAddNote={handleAddNote}
+                onDeleteNote={handleDeleteNote}
+                onUpdateNote={handleUpdateNote}
+              />
+            </div>
+
+            {/* Right panel - Chat */}
+            <div className="flex-1 min-h-0">
+              <ChatPanel
+                messages={messages}
+                isLoading={isLoading}
+                onSend={handleSend}
+                onReset={handleReset}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
