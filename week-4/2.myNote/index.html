@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>myNote</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            warm: {
+              50: '#fffbeb',
+              100: '#fef3c7',
+              200: '#fde68a',
+              300: '#fcd34d',
+              400: '#fbbf24',
+              500: '#f59e0b',
+              600: '#d97706',
+              700: '#b45309',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+
+    .sidebar-scroll::-webkit-scrollbar { width: 4px; }
+    .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 999px; }
+    .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+    textarea:focus, input:focus { outline: none; }
+
+    .note-item { transition: all 0.15s ease; }
+    .delete-btn { opacity: 0; transition: opacity 0.15s ease; }
+    .note-item:hover .delete-btn { opacity: 1; }
+
+    .fade-in {
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+    // ========================================
+    // API Helpers
+    // ========================================
+
+    const API = '/api/notes';
+
+    async function fetchNotes() {
+      const res = await fetch(API);
+      const json = await res.json();
+      return json.data;
+    }
+
+    async function createNoteAPI(data) {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
+      return json.data;
+    }
+
+    async function updateNoteAPI(id, data) {
+      const res = await fetch(`${API}/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
+      return json.data;
+    }
+
+    async function deleteNoteAPI(id) {
+      await fetch(`${API}/${id}`, { method: 'DELETE' });
+    }
+
+    function formatDate(isoString) {
+      const d = new Date(isoString);
+      const now = new Date();
+      const diffMs = now - d;
+      const diffMin = Math.floor(diffMs / 60000);
+      const diffHr = Math.floor(diffMs / 3600000);
+
+      if (diffMin < 1) return '방금 전';
+      if (diffMin < 60) return `${diffMin}분 전`;
+      if (diffHr < 24) return `${diffHr}시간 전`;
+
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return y === now.getFullYear() ? `${m}월 ${day}일` : `${y}.${m}.${day}`;
+    }
+
+    function getPreview(content, maxLen = 60) {
+      if (!content) return '내용 없음';
+      const clean = content.replace(/\n/g, ' ').trim();
+      return clean.length > maxLen ? clean.slice(0, maxLen) + '...' : clean;
+    }
+
+    // ========================================
+    // Search Icon SVG
+    // ========================================
+
+    function SearchIcon() {
+      return (
+        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      );
+    }
+
+    function PlusIcon() {
+      return (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+      );
+    }
+
+    function TrashIcon() {
+      return (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      );
+    }
+
+    function NoteIcon() {
+      return (
+        <svg className="w-16 h-16 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
+            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      );
+    }
+
+    // ========================================
+    // Sidebar Note Item
+    // ========================================
+
+    function NoteItem({ note, isActive, onSelect, onDelete }) {
+      return (
+        <div
+          onClick={() => onSelect(note.id)}
+          className={`note-item group px-4 py-3 cursor-pointer border-b border-gray-100 relative
+            ${isActive
+              ? 'bg-warm-50 border-l-2 border-l-warm-400'
+              : 'hover:bg-gray-50 border-l-2 border-l-transparent'
+            }`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <h3 className={`text-sm font-medium truncate ${isActive ? 'text-warm-700' : 'text-gray-800'}`}>
+                {note.title || '제목 없음'}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1 truncate">
+                {getPreview(note.content)}
+              </p>
+              <span className="text-[11px] text-gray-300 mt-1 block">
+                {formatDate(note.updatedAt)}
+              </span>
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(note.id); }}
+              className="delete-btn flex-shrink-0 p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-400 transition-colors"
+              title="삭제"
+            >
+              <TrashIcon />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Empty State
+    // ========================================
+
+    function EmptyState({ hasNotes }) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-white">
+          <div className="text-center fade-in">
+            <NoteIcon />
+            <p className="mt-4 text-gray-400 text-sm">
+              {hasNotes ? '메모를 선택해주세요' : '첫 번째 메모를 작성해보세요'}
+            </p>
+            {!hasNotes && (
+              <p className="mt-1 text-gray-300 text-xs">
+                왼쪽 상단의 + 버튼으로 새 메모를 만들 수 있어요
+              </p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Editor
+    // ========================================
+
+    function Editor({ note, onUpdate }) {
+      const titleRef = useRef(null);
+      const [title, setTitle] = useState(note.title);
+      const [content, setContent] = useState(note.content);
+
+      useEffect(() => {
+        setTitle(note.title);
+        setContent(note.content);
+      }, [note.id]);
+
+      const handleTitleChange = (e) => {
+        const val = e.target.value;
+        setTitle(val);
+        onUpdate(note.id, { title: val });
+      };
+
+      const handleContentChange = (e) => {
+        const val = e.target.value;
+        setContent(val);
+        onUpdate(note.id, { content: val });
+      };
+
+      return (
+        <div className="flex-1 flex flex-col bg-white fade-in">
+          <div className="px-10 pt-10 pb-2">
+            <input
+              ref={titleRef}
+              type="text"
+              value={title}
+              onChange={handleTitleChange}
+              placeholder="제목"
+              className="w-full text-2xl font-semibold text-gray-800 placeholder-gray-300 border-none bg-transparent"
+            />
+            <div className="flex items-center gap-3 mt-2 text-xs text-gray-300">
+              <span>{formatDate(note.updatedAt)}</span>
+              <span>{(content || '').length}자</span>
+            </div>
+          </div>
+          <div className="flex-1 px-10 py-4">
+            <textarea
+              value={content}
+              onChange={handleContentChange}
+              placeholder="여기에 메모를 작성하세요..."
+              className="w-full h-full resize-none text-[15px] leading-relaxed text-gray-700 placeholder-gray-300 bg-transparent"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+
+    function App() {
+      const [notes, setNotes] = useState([]);
+      const [activeId, setActiveId] = useState(null);
+      const [search, setSearch] = useState('');
+      const [loading, setLoading] = useState(true);
+      const debounceTimers = useRef({});
+
+      // Load notes from API on mount
+      useEffect(() => {
+        fetchNotes()
+          .then(data => setNotes(data))
+          .catch(err => console.error('Failed to load notes:', err))
+          .finally(() => setLoading(false));
+      }, []);
+
+      const sortedNotes = useMemo(() => {
+        return [...notes].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      }, [notes]);
+
+      const filteredNotes = useMemo(() => {
+        if (!search.trim()) return sortedNotes;
+        const q = search.toLowerCase();
+        return sortedNotes.filter(
+          n => (n.title || '').toLowerCase().includes(q) || (n.content || '').toLowerCase().includes(q)
+        );
+      }, [sortedNotes, search]);
+
+      const activeNote = useMemo(() => {
+        return notes.find(n => n.id === activeId) || null;
+      }, [notes, activeId]);
+
+      const handleCreate = useCallback(async () => {
+        try {
+          const newNote = await createNoteAPI({ title: '', content: '' });
+          setNotes(prev => [newNote, ...prev]);
+          setActiveId(newNote.id);
+          setSearch('');
+        } catch (err) {
+          console.error('Failed to create note:', err);
+        }
+      }, []);
+
+      const handleDelete = useCallback(async (id) => {
+        try {
+          await deleteNoteAPI(id);
+          setNotes(prev => prev.filter(n => n.id !== id));
+          if (activeId === id) setActiveId(null);
+        } catch (err) {
+          console.error('Failed to delete note:', err);
+        }
+      }, [activeId]);
+
+      const handleUpdate = useCallback((id, changes) => {
+        // Optimistic UI update
+        setNotes(prev =>
+          prev.map(n =>
+            n.id === id
+              ? { ...n, ...changes, updatedAt: new Date().toISOString() }
+              : n
+          )
+        );
+        // Debounced API call (500ms)
+        if (debounceTimers.current[id]) clearTimeout(debounceTimers.current[id]);
+        debounceTimers.current[id] = setTimeout(() => {
+          setNotes(prev => {
+            const note = prev.find(n => n.id === id);
+            if (note) {
+              updateNoteAPI(id, { title: note.title, content: note.content })
+                .catch(err => console.error('Failed to update note:', err));
+            }
+            return prev;
+          });
+        }, 500);
+      }, []);
+
+      if (loading) {
+        return (
+          <div className="flex h-screen items-center justify-center bg-gray-50">
+            <p className="text-gray-400 text-sm">메모를 불러오는 중...</p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex h-screen bg-gray-50">
+          {/* Sidebar */}
+          <div className="w-72 flex-shrink-0 bg-stone-50 border-r border-gray-200 flex flex-col">
+            {/* Sidebar Header */}
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex items-center justify-between mb-3">
+                <h1 className="text-lg font-bold text-gray-700 tracking-tight">
+                  <span className="text-warm-500">my</span>Note
+                </h1>
+                <button
+                  onClick={handleCreate}
+                  className="p-1.5 rounded-lg bg-warm-400 text-white hover:bg-warm-500 transition-colors shadow-sm"
+                  title="새 메모"
+                >
+                  <PlusIcon />
+                </button>
+              </div>
+              {/* Search */}
+              <div className="relative">
+                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                  <SearchIcon />
+                </div>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="메모 검색..."
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:border-warm-300 focus:ring-1 focus:ring-warm-200 transition-colors placeholder-gray-300"
+                />
+              </div>
+            </div>
+
+            {/* Note count */}
+            <div className="px-4 py-2 text-[11px] text-gray-400 uppercase tracking-wider font-medium">
+              {filteredNotes.length}개의 메모
+            </div>
+
+            {/* Note List */}
+            <div className="flex-1 overflow-y-auto sidebar-scroll">
+              {filteredNotes.length === 0 ? (
+                <div className="px-4 py-8 text-center">
+                  <p className="text-sm text-gray-300">
+                    {search ? '검색 결과가 없습니다' : '메모가 없습니다'}
+                  </p>
+                </div>
+              ) : (
+                filteredNotes.map(note => (
+                  <NoteItem
+                    key={note.id}
+                    note={note}
+                    isActive={note.id === activeId}
+                    onSelect={setActiveId}
+                    onDelete={handleDelete}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Main Editor Area */}
+          {activeNote ? (
+            <Editor
+              key={activeNote.id}
+              note={activeNote}
+              onUpdate={handleUpdate}
+            />
+          ) : (
+            <EmptyState hasNotes={notes.length > 0} />
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Render
+    // ========================================
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

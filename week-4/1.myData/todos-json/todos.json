@@ -1,0 +1,21 @@
+[
+  {
+    "filename": "todo_5_github_push",
+    "date": "2026-04-18",
+    "title": "GitHub 커밋 & 푸시",
+    "order": 5,
+    "details": [
+      "오늘 작업한 내용 커밋",
+      "aksoft13 레포에 푸시"
+    ],
+    "completed": false
+  },
+  {
+    "filename": "todo_6_저녁_약속",
+    "date": "2026-04-18",
+    "title": "저녁 약속",
+    "order": 6,
+    "details": [],
+    "completed": false
+  }
+]

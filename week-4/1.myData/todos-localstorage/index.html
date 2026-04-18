@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Todos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .todo-enter { animation: slideIn 0.2s ease-out; }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useMemo } = React;
+
+    const STORAGE_KEY = 'my-todos';
+
+    const initialTodos = [
+      { id: 1, filename: 'todo_1_morning_exercise', date: '2026-04-18', title: '아침 운동', order: 1, details: ['조깅 30분', '스트레칭 10분'], completed: true },
+      { id: 2, filename: 'todo_2_study_claude_api', date: '2026-04-18', title: 'Claude API 공부', order: 2, details: ['Claude API 문서 읽기', 'week-4 프로젝트 기능 구현 계획 세우기'], completed: true },
+      { id: 3, filename: 'todo_3_code_review', date: '2026-04-18', title: '코드 리뷰', order: 3, details: ['week-3 프로젝트 코드 재검토', '개선할 부분 메모하기'], completed: true },
+      { id: 4, filename: 'todo_4_lunch_break', date: '2026-04-18', title: '점심 휴식', order: 4, details: ['점심 식사 챙기기', '30분 휴식 및 산책'], completed: true },
+      { id: 5, filename: 'todo_5_github_push', date: '2026-04-18', title: 'GitHub 커밋 & 푸시', order: 5, details: ['오늘 작업한 내용 커밋', 'aksoft13 레포에 푸시'], completed: false },
+      { id: 6, filename: 'todo_6_저녁_약속', date: '2026-04-18', title: '저녁 약속', order: 6, details: [], completed: false },
+    ];
+
+    function loadTodos() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTodos));
+      return initialTodos;
+    }
+
+    function saveTodos(todos) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+    }
+
+    // ========================================
+    // Design System Components
+    // ========================================
+
+    function Button({ children, onClick, variant = "primary", size = "md", disabled = false, className = "" }) {
+      const base = "font-medium rounded-lg transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer";
+      const variants = {
+        primary: "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 active:bg-indigo-800",
+        secondary: "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-indigo-500",
+        danger: "bg-white text-gray-400 hover:text-red-500 hover:bg-red-50 focus:ring-red-500",
+        ghost: "bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:ring-gray-500",
+      };
+      const sizes = {
+        sm: "px-3 py-1.5 text-sm",
+        md: "px-4 py-2 text-sm",
+        lg: "px-6 py-3 text-base",
+      };
+      return (
+        <button
+          onClick={onClick}
+          disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ value, onChange, placeholder, onKeyDown, className = "", autoFocus = false }) {
+      return (
+        <input
+          type="text"
+          value={value}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          autoFocus={autoFocus}
+          className={`w-full px-4 py-3 text-gray-800 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder-gray-400 transition-shadow duration-150 shadow-sm ${className}`}
+        />
+      );
+    }
+
+    // ========================================
+    // Todo Item Component
+    // ========================================
+
+    function TodoItem({ todo, onToggle, onDelete }) {
+      return (
+        <li className="todo-enter group flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-150">
+          <button
+            onClick={() => onToggle(todo.id)}
+            className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-150 cursor-pointer ${
+              todo.completed
+                ? "bg-indigo-600 border-indigo-600"
+                : "border-gray-300 hover:border-indigo-400"
+            }`}
+            aria-label={todo.completed ? "완료 취소" : "완료 표시"}
+          >
+            {todo.completed && (
+              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </button>
+
+          <span
+            onClick={() => onToggle(todo.id)}
+            className={`flex-1 text-sm cursor-pointer select-none transition-all duration-150 ${
+              todo.completed ? "line-through text-gray-400" : "text-gray-800"
+            }`}
+          >
+            {todo.title}
+          </span>
+
+          <button
+            onClick={() => onDelete(todo.id)}
+            className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all duration-150 cursor-pointer"
+            aria-label="삭제"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </li>
+      );
+    }
+
+    // ========================================
+    // Filter Tabs Component
+    // ========================================
+
+    function FilterTabs({ current, onChange, counts }) {
+      const tabs = [
+        { key: "all", label: "All" },
+        { key: "active", label: "Active" },
+        { key: "completed", label: "Completed" },
+      ];
+
+      return (
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => onChange(tab.key)}
+              className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-all duration-150 cursor-pointer ${
+                current === tab.key
+                  ? "bg-white text-gray-800 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab.label}
+              <span className={`ml-1.5 ${current === tab.key ? "text-indigo-600" : "text-gray-400"}`}>
+                {counts[tab.key]}
+              </span>
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+
+    function App() {
+      const [todos, setTodos] = useState(() => loadTodos());
+      const [inputValue, setInputValue] = useState("");
+      const [filter, setFilter] = useState("all");
+
+      // todos 변경 시 localStorage에 자동 저장
+      useEffect(() => {
+        saveTodos(todos);
+      }, [todos]);
+
+      const addTodo = useCallback(() => {
+        const text = inputValue.trim();
+        if (!text) return;
+        const today = new Date().toISOString().slice(0, 10);
+        const newId = Date.now();
+        const newTodo = {
+          id: newId,
+          filename: `todo_${newId}`,
+          date: today,
+          title: text,
+          order: todos.length + 1,
+          details: [],
+          completed: false,
+        };
+        setTodos((prev) => [newTodo, ...prev]);
+        setInputValue("");
+      }, [inputValue, todos.length]);
+
+      const toggleTodo = useCallback((id) => {
+        setTodos((prev) =>
+          prev.map((t) => t.id === id ? { ...t, completed: !t.completed } : t)
+        );
+      }, []);
+
+      const deleteTodo = useCallback((id) => {
+        setTodos((prev) => prev.filter((t) => t.id !== id));
+      }, []);
+
+      const clearCompleted = useCallback(() => {
+        setTodos((prev) => prev.filter((t) => !t.completed));
+      }, []);
+
+      const handleKeyDown = useCallback(
+        (e) => { if (e.key === "Enter") addTodo(); },
+        [addTodo]
+      );
+
+      const counts = useMemo(() => ({
+        all: todos.length,
+        active: todos.filter((t) => !t.completed).length,
+        completed: todos.filter((t) => t.completed).length,
+      }), [todos]);
+
+      const filteredTodos = useMemo(() => {
+        if (filter === "active") return todos.filter((t) => !t.completed);
+        if (filter === "completed") return todos.filter((t) => t.completed);
+        return todos;
+      }, [todos, filter]);
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-start justify-center px-4 py-12 sm:py-20">
+          <div className="w-full max-w-md">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 tracking-tight">My Todos</h1>
+              <p className="mt-1 text-sm text-gray-500">
+                {counts.active === 0
+                  ? "모든 할 일을 완료했습니다!"
+                  : `${counts.active}개의 할 일이 남아있습니다`}
+              </p>
+              <p className="mt-1 text-xs text-gray-400">브라우저에 자동 저장됩니다</p>
+            </div>
+
+            {/* Input Area */}
+            <div className="flex gap-2 mb-6">
+              <Input
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="새로운 할 일을 입력하세요..."
+                autoFocus
+              />
+              <Button
+                onClick={addTodo}
+                disabled={!inputValue.trim()}
+                className="flex-shrink-0 rounded-xl px-5"
+              >
+                추가
+              </Button>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="mb-4">
+              <FilterTabs current={filter} onChange={setFilter} counts={counts} />
+            </div>
+
+            {/* Todo List */}
+            <ul className="space-y-2 mb-4">
+              {filteredTodos.map((todo) => (
+                <TodoItem
+                  key={todo.id}
+                  todo={todo}
+                  onToggle={toggleTodo}
+                  onDelete={deleteTodo}
+                />
+              ))}
+            </ul>
+
+            {/* Empty State */}
+            {filteredTodos.length === 0 && (
+              <div className="text-center py-12 text-gray-400">
+                <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <p className="text-sm">
+                  {filter === "active" && "완료하지 않은 할 일이 없습니다"}
+                  {filter === "completed" && "완료한 할 일이 없습니다"}
+                  {filter === "all" && "할 일을 추가해 보세요"}
+                </p>
+              </div>
+            )}
+
+            {/* Footer */}
+            {counts.completed > 0 && (
+              <div className="flex justify-end">
+                <button
+                  onClick={clearCompleted}
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors duration-150 cursor-pointer"
+                >
+                  완료된 항목 지우기
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
