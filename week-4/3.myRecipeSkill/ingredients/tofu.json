@@ -1,0 +1,11 @@
+{
+  "name": "두부",
+  "name_en": "tofu",
+  "quantity": 1,
+  "unit": "모",
+  "category": "단백질",
+  "expiry": "2026-04-20",
+  "storage": "냉장",
+  "notes": "",
+  "thumbnail": "./thumbnails/tofu.png"
+}

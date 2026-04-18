@@ -1,0 +1,11 @@
+{
+  "name": "김치",
+  "name_en": "kimchi",
+  "quantity": 300,
+  "unit": "g",
+  "category": "발효식품",
+  "expiry": "2026-06-01",
+  "storage": "냉장",
+  "notes": "",
+  "thumbnail": "./thumbnails/kimchi.png"
+}

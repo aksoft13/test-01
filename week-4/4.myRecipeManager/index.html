@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>냉장고 매니저 - 재료 & 레시피 관리</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            kitchen: {
+              50: '#faf7f2',
+              100: '#f3ede3',
+              200: '#e6d9c5',
+              300: '#d5bfa0',
+              400: '#c4a47b',
+              500: '#b38d60',
+              600: '#a67a52',
+              700: '#8a6345',
+              800: '#71513d',
+              900: '#5d4434',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(100%); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateX(0); }
+      to { opacity: 0; transform: translateX(100%); }
+    }
+    .animate-fadeIn { animation: fadeIn 0.2s ease-out; }
+    .animate-slideUp { animation: slideUp 0.3s ease-out; }
+    .animate-toastIn { animation: toastIn 0.3s ease-out; }
+    .animate-toastOut { animation: toastOut 0.3s ease-in forwards; }
+    .card-hover { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body class="bg-kitchen-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef, createContext, useContext } = React;
+
+    // ========================================
+    // API Configuration
+    // ========================================
+    const API_BASE_URL = window.location.hostname === 'localhost'
+      ? `http://${window.location.hostname}:3000/api`
+      : '/api';
+
+    async function apiFetch(endpoint, options = {}) {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        headers: { 'Content-Type': 'application/json', ...options.headers },
+        ...options,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: '요청 처리 중 오류가 발생했습니다.' }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    // ========================================
+    // Toast Context
+    // ========================================
+    const ToastContext = createContext();
+
+    function ToastProvider({ children }) {
+      const [toasts, setToasts] = useState([]);
+      const idRef = useRef(0);
+
+      const addToast = useCallback((message, type = 'success') => {
+        const id = ++idRef.current;
+        setToasts(prev => [...prev, { id, message, type, removing: false }]);
+        setTimeout(() => {
+          setToasts(prev => prev.map(t => t.id === id ? { ...t, removing: true } : t));
+          setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 300);
+        }, 2500);
+      }, []);
+
+      return (
+        <ToastContext.Provider value={addToast}>
+          {children}
+          <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm">
+            {toasts.map(t => (
+              <div
+                key={t.id}
+                className={`px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${
+                  t.removing ? 'animate-toastOut' : 'animate-toastIn'
+                } ${
+                  t.type === 'success' ? 'bg-green-600' :
+                  t.type === 'error' ? 'bg-red-600' : 'bg-yellow-600'
+                }`}
+              >
+                {t.message}
+              </div>
+            ))}
+          </div>
+        </ToastContext.Provider>
+      );
+    }
+
+    function useToast() { return useContext(ToastContext); }
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function Button({ variant = 'primary', size = 'md', disabled = false, onClick, className = '', children, ...props }) {
+      const base = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed';
+      const variants = {
+        primary: 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500',
+        secondary: 'bg-kitchen-200 hover:bg-kitchen-300 text-kitchen-800 focus:ring-kitchen-400',
+        danger: 'bg-red-500 hover:bg-red-600 text-white focus:ring-red-400',
+        ghost: 'bg-transparent hover:bg-kitchen-100 text-kitchen-700 focus:ring-kitchen-300',
+      };
+      const sizes = {
+        sm: 'px-2.5 py-1.5 text-xs gap-1',
+        md: 'px-4 py-2 text-sm gap-2',
+        lg: 'px-6 py-3 text-base gap-2',
+      };
+      return (
+        <button
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+          disabled={disabled}
+          onClick={onClick}
+          {...props}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ label, error, className = '', ...props }) {
+      return (
+        <div className={className}>
+          {label && <label className="block text-sm font-medium text-kitchen-700 mb-1">{label}</label>}
+          <input
+            className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 ${
+              error ? 'border-red-400 bg-red-50' : 'border-kitchen-200 bg-white'
+            }`}
+            {...props}
+          />
+          {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+        </div>
+      );
+    }
+
+    function Select({ label, options, className = '', ...props }) {
+      return (
+        <div className={className}>
+          {label && <label className="block text-sm font-medium text-kitchen-700 mb-1">{label}</label>}
+          <select
+            className="w-full px-3 py-2 border border-kitchen-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400"
+            {...props}
+          >
+            {options.map(opt => (
+              <option key={typeof opt === 'string' ? opt : opt.value} value={typeof opt === 'string' ? opt : opt.value}>
+                {typeof opt === 'string' ? opt : opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    function Textarea({ label, error, className = '', ...props }) {
+      return (
+        <div className={className}>
+          {label && <label className="block text-sm font-medium text-kitchen-700 mb-1">{label}</label>}
+          <textarea
+            className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 resize-vertical ${
+              error ? 'border-red-400 bg-red-50' : 'border-kitchen-200 bg-white'
+            }`}
+            {...props}
+          />
+          {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+        </div>
+      );
+    }
+
+    function Badge({ color = 'gray', children, className = '' }) {
+      const colors = {
+        gray: 'bg-gray-100 text-gray-700',
+        green: 'bg-green-100 text-green-700',
+        blue: 'bg-blue-100 text-blue-700',
+        cyan: 'bg-cyan-100 text-cyan-700',
+        red: 'bg-red-100 text-red-700',
+        yellow: 'bg-yellow-100 text-yellow-700',
+        purple: 'bg-purple-100 text-purple-700',
+        orange: 'bg-orange-100 text-orange-700',
+        pink: 'bg-pink-100 text-pink-700',
+        emerald: 'bg-emerald-100 text-emerald-700',
+      };
+      return (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors[color] || colors.gray} ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Modal({ isOpen, onClose, title, size = 'md', children }) {
+      const backdropRef = useRef(null);
+
+      useEffect(() => {
+        if (isOpen) document.body.style.overflow = 'hidden';
+        else document.body.style.overflow = '';
+        return () => { document.body.style.overflow = ''; };
+      }, [isOpen]);
+
+      useEffect(() => {
+        const handleEsc = (e) => { if (e.key === 'Escape') onClose(); };
+        if (isOpen) window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+      }, [isOpen, onClose]);
+
+      if (!isOpen) return null;
+
+      const sizes = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
+
+      return (
+        <div
+          ref={backdropRef}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-fadeIn"
+          onClick={(e) => { if (e.target === backdropRef.current) onClose(); }}
+        >
+          <div className={`bg-white rounded-xl shadow-2xl w-full ${sizes[size]} max-h-[90vh] flex flex-col animate-slideUp`}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-kitchen-100">
+              <h2 className="text-lg font-bold text-kitchen-800">{title}</h2>
+              <button onClick={onClose} className="p-1 text-kitchen-400 hover:text-kitchen-700 transition-colors" aria-label="닫기">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1">{children}</div>
+          </div>
+        </div>
+      );
+    }
+
+    function ConfirmDialog({ isOpen, onClose, onConfirm, title, message }) {
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
+          <p className="text-sm text-kitchen-600 mb-6">{message}</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>취소</Button>
+            <Button variant="danger" onClick={onConfirm}>삭제</Button>
+          </div>
+        </Modal>
+      );
+    }
+
+    function EmptyState({ icon, title, description }) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <span className="text-5xl mb-4">{icon}</span>
+          <h3 className="text-lg font-semibold text-kitchen-600 mb-1">{title}</h3>
+          <p className="text-sm text-kitchen-400">{description}</p>
+        </div>
+      );
+    }
+
+    function Spinner() {
+      return (
+        <div className="flex justify-center py-16">
+          <div className="w-8 h-8 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Constants
+    // ========================================
+    const INGREDIENT_CATEGORIES = ['단백질', '채소', '유제품', '곡물', '양념/소스', '기타'];
+    const STORAGE_TYPES = ['냉장', '냉동', '상온'];
+    const RECIPE_CATEGORIES = ['한식', '양식', '중식', '일식', '기타'];
+
+    const CATEGORY_COLORS = {
+      '단백질': 'red', '채소': 'green', '유제품': 'blue',
+      '곡물': 'yellow', '양념/소스': 'orange', '기타': 'gray',
+      '한식': 'red', '양식': 'purple', '중식': 'orange', '일식': 'pink',
+    };
+
+    const STORAGE_COLORS = { '냉장': 'blue', '냉동': 'cyan', '상온': 'emerald' };
+    const STORAGE_ICONS = { '냉장': '🧊', '냉동': '❄️', '상온': '🏠' };
+
+    // ========================================
+    // Utility Functions
+    // ========================================
+    function getExpiryStatus(expiryDate) {
+      if (!expiryDate) return 'normal';
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      const exp = new Date(expiryDate);
+      const diff = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+      if (diff <= 0) return 'expired';
+      if (diff <= 3) return 'danger';
+      if (diff <= 7) return 'warning';
+      return 'normal';
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const d = new Date(dateStr);
+      return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    function getExpiryLabel(expiryDate) {
+      if (!expiryDate) return '';
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      const exp = new Date(expiryDate);
+      const diff = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+      if (diff < 0) return `${Math.abs(diff)}일 지남`;
+      if (diff === 0) return '오늘 만료';
+      return `D-${diff}`;
+    }
+
+    // ========================================
+    // Tag Input Component
+    // ========================================
+    function TagInput({ label, tags, onChange, placeholder }) {
+      const [input, setInput] = useState('');
+
+      const addTag = () => {
+        const val = input.trim();
+        if (val && !tags.includes(val)) {
+          onChange([...tags, val]);
+        }
+        setInput('');
+      };
+
+      const removeTag = (idx) => {
+        onChange(tags.filter((_, i) => i !== idx));
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addTag();
+        }
+        if (e.key === 'Backspace' && !input && tags.length > 0) {
+          removeTag(tags.length - 1);
+        }
+      };
+
+      return (
+        <div>
+          {label && <label className="block text-sm font-medium text-kitchen-700 mb-1">{label}</label>}
+          <div className="flex flex-wrap gap-1.5 p-2 border border-kitchen-200 rounded-lg bg-white min-h-[42px] focus-within:ring-2 focus-within:ring-green-400 focus-within:border-green-400">
+            {tags.map((tag, i) => (
+              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                {tag}
+                <button type="button" onClick={() => removeTag(i)} className="hover:text-green-900">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </span>
+            ))}
+            <input
+              className="flex-1 min-w-[100px] text-sm outline-none bg-transparent"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={tags.length === 0 ? placeholder : '재료 입력 후 Enter'}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Ingredient Form Modal
+    // ========================================
+    const EMPTY_INGREDIENT = { name: '', name_en: '', quantity: '', unit: '개', category: '단백질', expiry: '', storage: '냉장', notes: '' };
+
+    function IngredientFormModal({ isOpen, onClose, onSubmit, initial }) {
+      const [form, setForm] = useState(EMPTY_INGREDIENT);
+      const [errors, setErrors] = useState({});
+
+      useEffect(() => {
+        if (isOpen) {
+          setForm(initial ? { ...EMPTY_INGREDIENT, ...initial } : EMPTY_INGREDIENT);
+          setErrors({});
+        }
+      }, [isOpen, initial]);
+
+      const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+      const validate = () => {
+        const e = {};
+        if (!form.name.trim()) e.name = '이름을 입력하세요';
+        if (!form.quantity || Number(form.quantity) <= 0) e.quantity = '수량을 입력하세요';
+        setErrors(e);
+        return Object.keys(e).length === 0;
+      };
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!validate()) return;
+        onSubmit({ ...form, quantity: Number(form.quantity) });
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={initial ? '재료 수정' : '재료 추가'} size="md">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="재료 이름 *" value={form.name} onChange={e => set('name', e.target.value)} placeholder="예: 계란" error={errors.name} />
+              <Input label="영문 이름" value={form.name_en} onChange={e => set('name_en', e.target.value)} placeholder="예: egg" />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <Input label="수량 *" type="number" min="0" step="any" value={form.quantity} onChange={e => set('quantity', e.target.value)} error={errors.quantity} />
+              <Input label="단위" value={form.unit} onChange={e => set('unit', e.target.value)} placeholder="예: 개, g, ml" />
+              <Select label="카테고리" value={form.category} onChange={e => set('category', e.target.value)} options={INGREDIENT_CATEGORIES} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="유통기한" type="date" value={form.expiry} onChange={e => set('expiry', e.target.value)} />
+              <Select label="보관 방법" value={form.storage} onChange={e => set('storage', e.target.value)} options={STORAGE_TYPES} />
+            </div>
+            <Textarea label="메모" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="메모 입력..." rows={2} />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="secondary" onClick={onClose}>취소</Button>
+              <Button type="submit">{initial ? '수정' : '추가'}</Button>
+            </div>
+          </form>
+        </Modal>
+      );
+    }
+
+    // ========================================
+    // Ingredient Card
+    // ========================================
+    function IngredientCard({ item, onEdit, onDelete }) {
+      const status = getExpiryStatus(item.expiry);
+      const expiryClasses = {
+        expired: 'text-red-600 bg-red-50 border-red-200',
+        danger: 'text-red-500 bg-red-50 border-red-200',
+        warning: 'text-yellow-600 bg-yellow-50 border-yellow-200',
+        normal: 'text-kitchen-500 bg-kitchen-50 border-kitchen-100',
+      };
+
+      return (
+        <div className="bg-white rounded-xl border border-kitchen-100 p-4 card-hover shadow-sm">
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h3 className="font-bold text-kitchen-800">{item.name}</h3>
+              {item.name_en && <p className="text-xs text-kitchen-400">{item.name_en}</p>}
+            </div>
+            <div className="flex gap-1.5">
+              <Badge color={CATEGORY_COLORS[item.category] || 'gray'}>{item.category}</Badge>
+              <Badge color={STORAGE_COLORS[item.storage] || 'gray'}>{STORAGE_ICONS[item.storage]} {item.storage}</Badge>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-2xl font-bold text-kitchen-700">
+              {item.quantity}<span className="text-sm font-normal text-kitchen-400 ml-0.5">{item.unit}</span>
+            </span>
+          </div>
+
+          {item.expiry && (
+            <div className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border mb-3 ${expiryClasses[status]}`}>
+              <span>{formatDate(item.expiry)}</span>
+              <span className="font-semibold">{getExpiryLabel(item.expiry)}</span>
+            </div>
+          )}
+
+          {item.notes && <p className="text-xs text-kitchen-400 mb-3 line-clamp-1">{item.notes}</p>}
+
+          <div className="flex justify-end gap-1.5 pt-2 border-t border-kitchen-50">
+            <Button variant="ghost" size="sm" onClick={() => onEdit(item)}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+              수정
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => onDelete(item)} className="text-red-500 hover:bg-red-50">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              삭제
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Ingredients Tab
+    // ========================================
+    function IngredientsTab() {
+      const toast = useToast();
+      const [ingredients, setIngredients] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [search, setSearch] = useState('');
+      const [filterCat, setFilterCat] = useState('');
+      const [modalOpen, setModalOpen] = useState(false);
+      const [editing, setEditing] = useState(null);
+      const [deleting, setDeleting] = useState(null);
+
+      const fetchIngredients = useCallback(async () => {
+        try {
+          setLoading(true);
+          const params = new URLSearchParams();
+          if (search) params.set('search', search);
+          if (filterCat) params.set('category', filterCat);
+          const qs = params.toString();
+          const data = await apiFetch(`/ingredients${qs ? '?' + qs : ''}`);
+          setIngredients(Array.isArray(data.data) ? data.data : []);
+        } catch (err) {
+          toast(err.message, 'error');
+        } finally {
+          setLoading(false);
+        }
+      }, [search, filterCat, toast]);
+
+      useEffect(() => { fetchIngredients(); }, [fetchIngredients]);
+
+      const handleSubmit = async (form) => {
+        try {
+          if (editing) {
+            await apiFetch(`/ingredients/${editing.id}`, { method: 'PUT', body: JSON.stringify(form) });
+            toast('재료가 수정되었습니다.');
+          } else {
+            await apiFetch('/ingredients', { method: 'POST', body: JSON.stringify(form) });
+            toast('재료가 추가되었습니다.');
+          }
+          setModalOpen(false);
+          setEditing(null);
+          fetchIngredients();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      };
+
+      const handleDelete = async () => {
+        if (!deleting) return;
+        try {
+          await apiFetch(`/ingredients/${deleting.id}`, { method: 'DELETE' });
+          setIngredients(prev => prev.filter(i => i.id !== deleting.id));
+          toast('재료가 삭제되었습니다.');
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+        setDeleting(null);
+      };
+
+      const openEdit = (item) => { setEditing(item); setModalOpen(true); };
+      const openAdd = () => { setEditing(null); setModalOpen(true); };
+
+      return (
+        <div>
+          {/* Toolbar */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-6">
+            <div className="relative flex-1">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-kitchen-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              <input
+                className="w-full pl-9 pr-3 py-2 border border-kitchen-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-400"
+                placeholder="재료 검색..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <Select
+              value={filterCat}
+              onChange={e => setFilterCat(e.target.value)}
+              options={[{ value: '', label: '전체 카테고리' }, ...INGREDIENT_CATEGORIES.map(c => ({ value: c, label: c }))]}
+              className="sm:w-40"
+            />
+            <Button onClick={openAdd}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              재료 추가
+            </Button>
+          </div>
+
+          {/* Content */}
+          {loading ? <Spinner /> : ingredients.length === 0 ? (
+            <EmptyState icon="🥬" title="등록된 재료가 없습니다" description="재료를 추가하여 냉장고를 관리해보세요." />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {ingredients.map(item => (
+                <IngredientCard key={item.id} item={item} onEdit={openEdit} onDelete={setDeleting} />
+              ))}
+            </div>
+          )}
+
+          <IngredientFormModal isOpen={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); }} onSubmit={handleSubmit} initial={editing} />
+          <ConfirmDialog
+            isOpen={!!deleting}
+            onClose={() => setDeleting(null)}
+            onConfirm={handleDelete}
+            title="재료 삭제"
+            message={`"${deleting?.name}" 재료를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`}
+          />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Recipe Form Modal
+    // ========================================
+    const EMPTY_RECIPE = { title: '', ingredients: [], instructions: '', category: '한식' };
+
+    function RecipeFormModal({ isOpen, onClose, onSubmit, initial }) {
+      const [form, setForm] = useState(EMPTY_RECIPE);
+      const [errors, setErrors] = useState({});
+
+      useEffect(() => {
+        if (isOpen) {
+          setForm(initial ? { ...EMPTY_RECIPE, ...initial, ingredients: initial.ingredients || [] } : EMPTY_RECIPE);
+          setErrors({});
+        }
+      }, [isOpen, initial]);
+
+      const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+      const validate = () => {
+        const e = {};
+        if (!form.title.trim()) e.title = '제목을 입력하세요';
+        if (!form.ingredients.length) e.ingredients = '재료를 하나 이상 추가하세요';
+        if (!form.instructions.trim()) e.instructions = '조리 방법을 입력하세요';
+        setErrors(e);
+        return Object.keys(e).length === 0;
+      };
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!validate()) return;
+        onSubmit(form);
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={initial ? '레시피 수정' : '레시피 추가'} size="lg">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input label="레시피 제목 *" value={form.title} onChange={e => set('title', e.target.value)} placeholder="예: 계란볶음밥" error={errors.title} />
+              <Select label="카테고리" value={form.category} onChange={e => set('category', e.target.value)} options={RECIPE_CATEGORIES} />
+            </div>
+            <div>
+              <TagInput label="재료 *" tags={form.ingredients} onChange={v => set('ingredients', v)} placeholder="재료 이름 입력 후 Enter" />
+              {errors.ingredients && <p className="mt-1 text-xs text-red-500">{errors.ingredients}</p>}
+            </div>
+            <Textarea label="조리 방법 *" value={form.instructions} onChange={e => set('instructions', e.target.value)} placeholder="1. 재료를 준비합니다.&#10;2. ..." rows={6} error={errors.instructions} />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="secondary" onClick={onClose}>취소</Button>
+              <Button type="submit">{initial ? '수정' : '추가'}</Button>
+            </div>
+          </form>
+        </Modal>
+      );
+    }
+
+    // ========================================
+    // Recipe Detail Modal
+    // ========================================
+    function RecipeDetailModal({ isOpen, onClose, recipe }) {
+      if (!recipe) return null;
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={recipe.title} size="lg">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Badge color={CATEGORY_COLORS[recipe.category] || 'gray'}>{recipe.category}</Badge>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-kitchen-700 mb-2">재료</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {(recipe.ingredients || []).map((ing, i) => (
+                  <Badge key={i} color="green">{ing}</Badge>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-kitchen-700 mb-2">조리 방법</h4>
+              <div className="bg-kitchen-50 rounded-lg p-4 text-sm text-kitchen-700 whitespace-pre-wrap leading-relaxed">
+                {recipe.instructions}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      );
+    }
+
+    // ========================================
+    // Recipe Card
+    // ========================================
+    function RecipeCard({ recipe, onEdit, onDelete, onView }) {
+      const firstLine = (recipe.instructions || '').split('\n')[0];
+      return (
+        <div className="bg-white rounded-xl border border-kitchen-100 p-4 card-hover shadow-sm cursor-pointer" onClick={() => onView(recipe)}>
+          <div className="flex items-start justify-between mb-3">
+            <h3 className="font-bold text-kitchen-800 text-lg">{recipe.title}</h3>
+            <Badge color={CATEGORY_COLORS[recipe.category] || 'gray'}>{recipe.category}</Badge>
+          </div>
+
+          <div className="flex flex-wrap gap-1 mb-3">
+            {(recipe.ingredients || []).slice(0, 6).map((ing, i) => (
+              <Badge key={i} color="green">{ing}</Badge>
+            ))}
+            {(recipe.ingredients || []).length > 6 && <Badge color="gray">+{recipe.ingredients.length - 6}</Badge>}
+          </div>
+
+          <p className="text-sm text-kitchen-500 mb-4 line-clamp-2">{firstLine}</p>
+
+          <div className="flex justify-end gap-1.5 pt-2 border-t border-kitchen-50" onClick={e => e.stopPropagation()}>
+            <Button variant="ghost" size="sm" onClick={() => onEdit(recipe)}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+              수정
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => onDelete(recipe)} className="text-red-500 hover:bg-red-50">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              삭제
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Recipes Tab
+    // ========================================
+    function RecipesTab() {
+      const toast = useToast();
+      const [recipes, setRecipes] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [search, setSearch] = useState('');
+      const [filterCat, setFilterCat] = useState('');
+      const [modalOpen, setModalOpen] = useState(false);
+      const [editing, setEditing] = useState(null);
+      const [deleting, setDeleting] = useState(null);
+      const [viewing, setViewing] = useState(null);
+
+      const fetchRecipes = useCallback(async () => {
+        try {
+          setLoading(true);
+          const params = new URLSearchParams();
+          if (search) params.set('search', search);
+          if (filterCat) params.set('category', filterCat);
+          const qs = params.toString();
+          const data = await apiFetch(`/recipes${qs ? '?' + qs : ''}`);
+          setRecipes(Array.isArray(data.data) ? data.data : []);
+        } catch (err) {
+          toast(err.message, 'error');
+        } finally {
+          setLoading(false);
+        }
+      }, [search, filterCat, toast]);
+
+      useEffect(() => { fetchRecipes(); }, [fetchRecipes]);
+
+      const handleSubmit = async (form) => {
+        try {
+          if (editing) {
+            await apiFetch(`/recipes/${editing.id}`, { method: 'PUT', body: JSON.stringify(form) });
+            toast('레시피가 수정되었습니다.');
+          } else {
+            await apiFetch('/recipes', { method: 'POST', body: JSON.stringify(form) });
+            toast('레시피가 추가되었습니다.');
+          }
+          setModalOpen(false);
+          setEditing(null);
+          fetchRecipes();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      };
+
+      const handleDelete = async () => {
+        if (!deleting) return;
+        try {
+          await apiFetch(`/recipes/${deleting.id}`, { method: 'DELETE' });
+          setRecipes(prev => prev.filter(r => r.id !== deleting.id));
+          toast('레시피가 삭제되었습니다.');
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+        setDeleting(null);
+      };
+
+      const openEdit = (item) => { setEditing(item); setModalOpen(true); };
+      const openAdd = () => { setEditing(null); setModalOpen(true); };
+
+      return (
+        <div>
+          {/* Toolbar */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-6">
+            <div className="relative flex-1">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-kitchen-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              <input
+                className="w-full pl-9 pr-3 py-2 border border-kitchen-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-400"
+                placeholder="레시피 검색..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <Select
+              value={filterCat}
+              onChange={e => setFilterCat(e.target.value)}
+              options={[{ value: '', label: '전체 카테고리' }, ...RECIPE_CATEGORIES.map(c => ({ value: c, label: c }))]}
+              className="sm:w-40"
+            />
+            <Button onClick={openAdd}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              레시피 추가
+            </Button>
+          </div>
+
+          {/* Content */}
+          {loading ? <Spinner /> : recipes.length === 0 ? (
+            <EmptyState icon="📖" title="등록된 레시피가 없습니다" description="레시피를 추가하여 나만의 요리책을 만들어보세요." />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recipes.map(recipe => (
+                <RecipeCard key={recipe.id} recipe={recipe} onEdit={openEdit} onDelete={setDeleting} onView={setViewing} />
+              ))}
+            </div>
+          )}
+
+          <RecipeFormModal isOpen={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); }} onSubmit={handleSubmit} initial={editing} />
+          <RecipeDetailModal isOpen={!!viewing} onClose={() => setViewing(null)} recipe={viewing} />
+          <ConfirmDialog
+            isOpen={!!deleting}
+            onClose={() => setDeleting(null)}
+            onConfirm={handleDelete}
+            title="레시피 삭제"
+            message={`"${deleting?.title}" 레시피를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`}
+          />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Recommend Tab
+    // ========================================
+    function RecommendTab() {
+      const toast = useToast();
+      const [results, setResults] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [viewing, setViewing] = useState(null);
+      const [filterMode, setFilterMode] = useState('all'); // 'all' | 'canMake' | 'partial'
+
+      const fetchRecommend = async () => {
+        try {
+          setLoading(true);
+          const data = await apiFetch('/recommend');
+          setResults(data);
+        } catch (err) {
+          toast(err.message, 'error');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const filtered = results?.data?.filter(r => {
+        if (filterMode === 'canMake') return r.matchRate === 100;
+        if (filterMode === 'partial') return r.matchRate > 0 && r.matchRate < 100;
+        return true;
+      }) ?? [];
+
+      const getMatchColor = (rate) => {
+        if (rate === 100) return 'text-green-700 bg-green-100 border-green-300';
+        if (rate >= 70) return 'text-blue-700 bg-blue-100 border-blue-300';
+        if (rate >= 40) return 'text-yellow-700 bg-yellow-100 border-yellow-300';
+        return 'text-gray-600 bg-gray-100 border-gray-200';
+      };
+
+      const getMatchLabel = (rate) => {
+        if (rate === 100) return '바로 만들기 가능!';
+        if (rate >= 70) return '거의 다 있어요';
+        if (rate >= 40) return '일부 재료 있음';
+        return '재료 많이 필요';
+      };
+
+      if (!results) {
+        return (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <span className="text-6xl mb-4">🔍</span>
+            <h3 className="text-xl font-bold text-kitchen-700 mb-2">냉장고 재료로 만들 수 있는 요리를 찾아보세요</h3>
+            <p className="text-sm text-kitchen-400 mb-8">등록된 재료와 레시피를 비교해 만들 수 있는 음식을 추천해드립니다.</p>
+            <Button size="lg" onClick={fetchRecommend} disabled={loading}>
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  분석 중...
+                </span>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                  레시피 추천 받기
+                </>
+              )}
+            </Button>
+          </div>
+        );
+      }
+
+      return (
+        <div>
+          {/* Summary Bar */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6 bg-white rounded-xl border border-kitchen-100 p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🥡</span>
+              <div>
+                <p className="text-sm font-semibold text-kitchen-700">냉장고 재료 {results.fridgeCount}개 기준</p>
+                <p className="text-xs text-kitchen-400">레시피 {results.data.length}개 분석 완료</p>
+              </div>
+              <div className="flex gap-2 ml-4 text-xs">
+                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">{results.data.filter(r => r.matchRate === 100).length}개 즉시 가능</span>
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">{results.data.filter(r => r.matchRate >= 70 && r.matchRate < 100).length}개 거의 가능</span>
+              </div>
+            </div>
+            <Button variant="secondary" size="sm" onClick={fetchRecommend} disabled={loading}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              다시 분석
+            </Button>
+          </div>
+
+          {/* Filter */}
+          <div className="flex gap-2 mb-4">
+            {[
+              { id: 'all', label: '전체' },
+              { id: 'canMake', label: '바로 만들기 가능' },
+              { id: 'partial', label: '재료 일부 보유' },
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => setFilterMode(f.id)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                  filterMode === f.id ? 'bg-green-600 text-white' : 'bg-white text-kitchen-600 border border-kitchen-200 hover:bg-kitchen-50'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Results */}
+          {filtered.length === 0 ? (
+            <EmptyState icon="😢" title="해당하는 레시피가 없습니다" description="다른 필터를 선택하거나 재료/레시피를 더 추가해보세요." />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map(recipe => (
+                <div
+                  key={recipe.id}
+                  className="bg-white rounded-xl border border-kitchen-100 p-4 card-hover shadow-sm cursor-pointer"
+                  onClick={() => setViewing(recipe)}
+                >
+                  {/* Match Rate Badge */}
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="font-bold text-kitchen-800 text-base leading-tight pr-2">{recipe.title}</h3>
+                    <span className={`flex-shrink-0 text-xs font-bold px-2 py-1 rounded-full border ${getMatchColor(recipe.matchRate)}`}>
+                      {recipe.matchRate}%
+                    </span>
+                  </div>
+
+                  {/* Match Label */}
+                  <p className={`text-xs font-medium mb-3 ${
+                    recipe.matchRate === 100 ? 'text-green-600' :
+                    recipe.matchRate >= 70 ? 'text-blue-600' :
+                    recipe.matchRate >= 40 ? 'text-yellow-600' : 'text-gray-500'
+                  }`}>{getMatchLabel(recipe.matchRate)}</p>
+
+                  {/* Progress Bar */}
+                  <div className="w-full bg-kitchen-100 rounded-full h-1.5 mb-3">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${
+                        recipe.matchRate === 100 ? 'bg-green-500' :
+                        recipe.matchRate >= 70 ? 'bg-blue-500' :
+                        recipe.matchRate >= 40 ? 'bg-yellow-500' : 'bg-gray-400'
+                      }`}
+                      style={{ width: `${recipe.matchRate}%` }}
+                    />
+                  </div>
+
+                  {/* Matched Ingredients */}
+                  {recipe.matched.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-xs text-kitchen-400 mb-1">보유 재료 ({recipe.matched.length})</p>
+                      <div className="flex flex-wrap gap-1">
+                        {recipe.matched.map((ing, i) => (
+                          <span key={i} className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">{ing}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Missing Ingredients */}
+                  {recipe.missing.length > 0 && (
+                    <div>
+                      <p className="text-xs text-kitchen-400 mb-1">필요 재료 ({recipe.missing.length})</p>
+                      <div className="flex flex-wrap gap-1">
+                        {recipe.missing.map((ing, i) => (
+                          <span key={i} className="text-xs px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full border border-red-100">{ing}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-kitchen-300 mt-3 text-right">재료 {recipe.matchCount}/{recipe.totalCount}개 보유</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <RecipeDetailModal isOpen={!!viewing} onClose={() => setViewing(null)} recipe={viewing} />
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const [activeTab, setActiveTab] = useState('ingredients');
+
+      const tabs = [
+        { id: 'ingredients', label: '재료 관리', icon: '🥗' },
+        { id: 'recipes', label: '레시피 관리', icon: '📖' },
+        { id: 'recommend', label: '레시피 추천', icon: '✨' },
+      ];
+
+      return (
+        <ToastProvider>
+          <div className="min-h-screen bg-kitchen-50">
+            {/* Header */}
+            <header className="bg-white border-b border-kitchen-100 shadow-sm sticky top-0 z-30">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6">
+                <div className="flex items-center justify-between h-14">
+                  <h1 className="text-xl font-bold text-kitchen-800 tracking-tight">
+                    <span className="mr-1.5">🍳</span>냉장고 매니저
+                  </h1>
+                  <nav className="flex gap-1">
+                    {tabs.map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                          activeTab === tab.id
+                            ? 'bg-green-100 text-green-700'
+                            : 'text-kitchen-500 hover:bg-kitchen-100 hover:text-kitchen-700'
+                        }`}
+                      >
+                        <span className="mr-1">{tab.icon}</span>{tab.label}
+                      </button>
+                    ))}
+                  </nav>
+                </div>
+              </div>
+            </header>
+
+            {/* Main Content */}
+            <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+              {activeTab === 'ingredients' ? <IngredientsTab /> :
+               activeTab === 'recipes' ? <RecipesTab /> :
+               <RecommendTab />}
+            </main>
+          </div>
+        </ToastProvider>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

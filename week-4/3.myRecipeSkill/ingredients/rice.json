@@ -1,0 +1,11 @@
+{
+  "name": "밥",
+  "name_en": "rice",
+  "quantity": 2,
+  "unit": "인분",
+  "category": "탄수화물",
+  "expiry": "2026-04-19",
+  "storage": "냉장",
+  "notes": "",
+  "thumbnail": "./thumbnails/rice.png"
+}

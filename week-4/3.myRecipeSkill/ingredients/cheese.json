@@ -1,0 +1,11 @@
+{
+  "name": "슬라이스치즈",
+  "name_en": "cheese",
+  "quantity": 3,
+  "unit": "장",
+  "category": "유제품",
+  "expiry": "2026-04-28",
+  "storage": "냉장",
+  "notes": "",
+  "thumbnail": "./thumbnails/cheese.png"
+}

@@ -1,0 +1,11 @@
+{
+  "name": "스팸",
+  "name_en": "spam",
+  "quantity": 1,
+  "unit": "캔",
+  "category": "가공육",
+  "expiry": "2027-01-01",
+  "storage": "실온",
+  "notes": "",
+  "thumbnail": "./thumbnails/spam.png"
+}

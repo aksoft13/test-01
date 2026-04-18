@@ -1,0 +1,14 @@
+{
+  "name": "my-recipe-manager",
+  "version": "1.0.0",
+  "description": "Recipe Manager with Supabase PostgreSQL",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "pg": "^8.13.3"
+  }
+}

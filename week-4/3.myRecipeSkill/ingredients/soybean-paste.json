@@ -1,0 +1,11 @@
+{
+  "name": "된장",
+  "name_en": "soybean-paste",
+  "quantity": 100,
+  "unit": "g",
+  "category": "소스/양념",
+  "expiry": "2027-12-01",
+  "storage": "냉장",
+  "notes": "",
+  "thumbnail": "./thumbnails/soybean-paste.png"
+}

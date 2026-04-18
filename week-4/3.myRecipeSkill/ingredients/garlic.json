@@ -1,0 +1,11 @@
+{
+  "name": "다진마늘",
+  "name_en": "garlic",
+  "quantity": 50,
+  "unit": "g",
+  "category": "채소",
+  "expiry": "2026-05-01",
+  "storage": "냉장",
+  "notes": "",
+  "thumbnail": "./thumbnails/garlic.png"
+}
