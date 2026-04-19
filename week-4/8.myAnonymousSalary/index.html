@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>myAnonymousSalary - 익명 연봉/지출 비교</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #0f0f0f; margin: 0; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1a2e; }
+    ::-webkit-scrollbar-thumb { background: #7c3aed; border-radius: 3px; }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(124, 58, 237, 0.15); }
+      50% { box-shadow: 0 0 30px rgba(124, 58, 237, 0.3); }
+    }
+    .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
+    .animate-slide-in { animation: slideIn 0.4s ease-out forwards; }
+    .pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
+    .stagger-1 { animation-delay: 0.1s; opacity: 0; }
+    .stagger-2 { animation-delay: 0.2s; opacity: 0; }
+    .stagger-3 { animation-delay: 0.3s; opacity: 0; }
+    .stagger-4 { animation-delay: 0.4s; opacity: 0; }
+    .stagger-5 { animation-delay: 0.5s; opacity: 0; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none; margin: 0;
+    }
+    input[type="number"] { -moz-appearance: textfield; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks Destructuring
+    // ========================================
+    const { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } = React;
+
+    // ========================================
+    // API Base URL
+    // ========================================
+    const API_BASE_URL = '/api';
+
+    // ========================================
+    // Constants
+    // ========================================
+    const REGIONS = ['서울', '경기', '부산', '대구', '인천', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
+    const JOB_CATEGORIES = ['IT/개발', '금융/회계', '마케팅/기획', '디자인', '영업', '의료/복지', '교육', '제조/생산', '서비스', '기타'];
+    const SUBSCRIPTIONS = ['넷플릭스', '유튜브프리미엄', '디즈니+', '왓챠', '티빙', '웨이브', '애플TV+', '스포티파이', '멜론', '지니뮤직', '애플뮤직', '배달의민족', '쿠팡이츠', '요기요', '쿠팡로켓', '네이버플러스', '카카오구독', '기타'];
+
+    // ========================================
+    // API helpers
+    // ========================================
+    const apiFetch = (url, opts) => fetch(url, opts).then(r => r.json());
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function Button({ children, variant = 'primary', size = 'md', disabled = false, onClick, className = '', type = 'button' }) {
+      const base = 'font-semibold rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 inline-flex items-center justify-center';
+      const variants = {
+        primary: 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white focus:ring-violet-500 shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40',
+        secondary: 'bg-gray-700 hover:bg-gray-600 text-gray-200 focus:ring-gray-500 border border-gray-600',
+        ghost: 'bg-transparent hover:bg-white/5 text-gray-400 hover:text-white focus:ring-gray-500',
+        danger: 'bg-red-600 hover:bg-red-500 text-white focus:ring-red-500'
+      };
+      const sizes = { sm: 'px-3 py-1.5 text-sm', md: 'px-5 py-2.5 text-base', lg: 'px-8 py-3.5 text-lg' };
+      const disabledStyle = disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer';
+      return (
+        <button type={type} disabled={disabled} onClick={onClick}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${disabledStyle} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ label, type = 'text', value, onChange, placeholder, error, disabled, suffix, className = '', min, max, step }) {
+      return (
+        <div className={`flex flex-col gap-1.5 ${className}`}>
+          {label && <label className="text-sm font-medium text-gray-300">{label}</label>}
+          <div className="relative">
+            <input type={type} value={value} onChange={onChange} placeholder={placeholder}
+              disabled={disabled} min={min} max={max} step={step}
+              className={`w-full bg-gray-800/50 border ${error ? 'border-red-500' : 'border-gray-700'} rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-colors ${suffix ? 'pr-14' : ''}`} />
+            {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{suffix}</span>}
+          </div>
+          {error && <span className="text-xs text-red-400">{error}</span>}
+        </div>
+      );
+    }
+
+    function Select({ label, value, onChange, options, placeholder, error, className = '' }) {
+      return (
+        <div className={`flex flex-col gap-1.5 ${className}`}>
+          {label && <label className="text-sm font-medium text-gray-300">{label}</label>}
+          <select value={value} onChange={onChange}
+            className={`w-full bg-gray-800/50 border ${error ? 'border-red-500' : 'border-gray-700'} rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-colors appearance-none cursor-pointer`}>
+            {placeholder && <option value="">{placeholder}</option>}
+            {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          </select>
+          {error && <span className="text-xs text-red-400">{error}</span>}
+        </div>
+      );
+    }
+
+    function Card({ children, className = '', glow = false }) {
+      return (
+        <div className={`bg-gray-900/80 border border-gray-800 rounded-2xl p-6 backdrop-blur-sm ${glow ? 'pulse-glow' : ''} ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function StatCard({ label, value, unit = '', icon, accent = false }) {
+      return (
+        <Card className={`text-center animate-fade-in-up ${accent ? 'border-violet-500/30' : ''}`}>
+          {icon && <div className="text-3xl mb-2">{icon}</div>}
+          <div className={`text-2xl sm:text-3xl font-bold mb-1 ${accent ? 'bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent' : 'text-white'}`}>
+            {value}{unit}
+          </div>
+          <div className="text-sm text-gray-400">{label}</div>
+        </Card>
+      );
+    }
+
+    function Spinner({ size = 'md' }) {
+      const sizes = { sm: 'w-5 h-5', md: 'w-8 h-8', lg: 'w-12 h-12' };
+      return (
+        <div className="flex justify-center items-center py-12">
+          <div className={`${sizes[size]} border-2 border-gray-700 border-t-violet-500 rounded-full animate-spin`}></div>
+        </div>
+      );
+    }
+
+    function Checkbox({ label, checked, onChange }) {
+      return (
+        <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all duration-200 text-sm
+          ${checked ? 'bg-violet-600/20 border-violet-500/50 text-violet-300' : 'bg-gray-800/30 border-gray-700/50 text-gray-400 hover:border-gray-600'}`}>
+          <input type="checkbox" checked={checked} onChange={onChange} className="hidden" />
+          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors
+            ${checked ? 'bg-violet-600 border-violet-500' : 'border-gray-600'}`}>
+            {checked && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+          </div>
+          {label}
+        </label>
+      );
+    }
+
+    function SectionTitle({ children, className = '' }) {
+      return <h2 className={`text-xl sm:text-2xl font-bold text-white mb-4 ${className}`}>{children}</h2>;
+    }
+
+    // ========================================
+    // Router Components
+    // ========================================
+    const RouterContext = createContext({ path: '/', navigate: () => {} });
+
+    function useRouter() {
+      return useContext(RouterContext);
+    }
+
+    function Router({ children }) {
+      const [path, setPath] = useState(window.location.hash.slice(1) || '/submit');
+
+      useEffect(() => {
+        const handleHash = () => {
+          const newPath = window.location.hash.slice(1) || '/submit';
+          setPath(newPath);
+        };
+        window.addEventListener('hashchange', handleHash);
+        if (!window.location.hash) window.location.hash = '#/submit';
+        return () => window.removeEventListener('hashchange', handleHash);
+      }, []);
+
+      const navigate = useCallback((to) => {
+        window.location.hash = '#' + to;
+      }, []);
+
+      return (
+        <RouterContext.Provider value={{ path, navigate }}>
+          {children}
+        </RouterContext.Provider>
+      );
+    }
+
+    function Link({ to, children, className = '', activeClassName = '' }) {
+      const { path, navigate } = useRouter();
+      const isActive = path === to;
+      const handleClick = (e) => { e.preventDefault(); navigate(to); };
+      return (
+        <a href={`#${to}`} onClick={handleClick}
+          className={`${className} ${isActive ? activeClassName : ''}`}>
+          {children}
+        </a>
+      );
+    }
+
+    // ========================================
+    // Layout Components
+    // ========================================
+    function Header() {
+      const { path } = useRouter();
+      const navItems = [
+        { path: '/submit', label: '데이터 입력', icon: '✏️' },
+        { path: '/result', label: '내 결과', icon: '📊' },
+        { path: '/stats', label: '전체 통계', icon: '📈' },
+        { path: '/list', label: '데이터 목록', icon: '📋' }
+      ];
+
+      return (
+        <header className="sticky top-0 z-50 bg-gray-950/80 backdrop-blur-md border-b border-gray-800">
+          <div className="max-w-6xl mx-auto px-4">
+            <div className="flex items-center justify-between h-16">
+              <Link to="/submit" className="flex items-center gap-2 text-white hover:text-violet-400 transition-colors">
+                <span className="text-2xl">💰</span>
+                <span className="font-bold text-lg hidden sm:block">익명 연봉/지출 비교</span>
+              </Link>
+              <nav className="flex gap-1">
+                {navItems.map(item => (
+                  <Link key={item.path} to={item.path}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200
+                      ${path === item.path
+                        ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                    <span className="mr-1.5 hidden sm:inline">{item.icon}</span>
+                    <span className="hidden md:inline">{item.label}</span>
+                    <span className="md:hidden">{item.icon}</span>
+                  </Link>
+                ))}
+              </nav>
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    function PageContainer({ children }) {
+      return (
+        <main className="max-w-6xl mx-auto px-4 py-8">
+          {children}
+        </main>
+      );
+    }
+
+    // ========================================
+    // Chart Hook - useChart
+    // ========================================
+    function useChart(canvasRef, config) {
+      const chartRef = useRef(null);
+
+      useEffect(() => {
+        if (!canvasRef.current || !config) return;
+
+        if (chartRef.current) {
+          chartRef.current.destroy();
+        }
+
+        const ctx = canvasRef.current.getContext('2d');
+        chartRef.current = new Chart(ctx, config);
+
+        return () => {
+          if (chartRef.current) {
+            chartRef.current.destroy();
+            chartRef.current = null;
+          }
+        };
+      }, [config]);
+
+      return chartRef;
+    }
+
+    // ========================================
+    // Page: Submit (#/submit)
+    // ========================================
+    function SubmitPage() {
+      const { navigate } = useRouter();
+      const [form, setForm] = useState({
+        monthly_salary: '',
+        monthly_expense: '',
+        food_expense: '',
+        housing_expense: '',
+        transport_expense: '',
+        subscription_expense: '',
+        other_expense: '',
+        region: '',
+        job_category: '',
+        years_of_experience: '',
+        subscriptions: []
+      });
+      const [errors, setErrors] = useState({});
+      const [submitting, setSubmitting] = useState(false);
+
+      const updateField = (field, value) => {
+        setForm(prev => ({ ...prev, [field]: value }));
+        if (errors[field]) setErrors(prev => ({ ...prev, [field]: null }));
+      };
+
+      const toggleSubscription = (sub) => {
+        setForm(prev => ({
+          ...prev,
+          subscriptions: prev.subscriptions.includes(sub)
+            ? prev.subscriptions.filter(s => s !== sub)
+            : [...prev.subscriptions, sub]
+        }));
+      };
+
+      const validate = () => {
+        const errs = {};
+        if (!form.monthly_salary || form.monthly_salary <= 0) errs.monthly_salary = '월 소득을 입력해주세요';
+        if (!form.monthly_expense || form.monthly_expense <= 0) errs.monthly_expense = '월 지출을 입력해주세요';
+        if (!form.region) errs.region = '거주 지역을 선택해주세요';
+        if (!form.job_category) errs.job_category = '직군을 선택해주세요';
+        if (form.years_of_experience === '' || form.years_of_experience < 0) errs.years_of_experience = '연차를 입력해주세요';
+
+        const breakdownTotal = (Number(form.food_expense) || 0) + (Number(form.housing_expense) || 0) +
+          (Number(form.transport_expense) || 0) + (Number(form.subscription_expense) || 0) + (Number(form.other_expense) || 0);
+        if (breakdownTotal > 0 && Math.abs(breakdownTotal - Number(form.monthly_expense)) > 10) {
+          errs.breakdown = `세부 항목 합계(${breakdownTotal}만원)가 총 지출(${form.monthly_expense}만원)과 다릅니다`;
+        }
+        setErrors(errs);
+        return Object.keys(errs).length === 0;
+      };
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!validate()) return;
+        setSubmitting(true);
+        try {
+          const submitData = {
+            monthly_salary: Number(form.monthly_salary),
+            monthly_expense: Number(form.monthly_expense),
+            food_expense: Number(form.food_expense) || 0,
+            housing_expense: Number(form.housing_expense) || 0,
+            transport_expense: Number(form.transport_expense) || 0,
+            subscription_expense: Number(form.subscription_expense) || 0,
+            other_expense: Number(form.other_expense) || 0,
+            region: form.region,
+            job_category: form.job_category,
+            years_of_experience: Number(form.years_of_experience),
+            subscriptions: form.subscriptions
+          };
+
+          // Auto-fill other_expense if breakdown is empty but total expense exists
+          if (submitData.food_expense === 0 && submitData.housing_expense === 0 && submitData.transport_expense === 0 && submitData.subscription_expense === 0 && submitData.other_expense === 0) {
+            submitData.other_expense = submitData.monthly_expense;
+          }
+
+          const result = await apiFetch('/api/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(submitData)
+          });
+          if (!result.success) throw new Error(result.message || '제출에 실패했습니다.');
+
+          sessionStorage.setItem('myData', JSON.stringify(submitData));
+          navigate('/result');
+        } catch (err) {
+          alert('제출에 실패했습니다. 다시 시도해주세요.');
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const autoFillOther = () => {
+        const total = Number(form.monthly_expense) || 0;
+        const parts = (Number(form.food_expense) || 0) + (Number(form.housing_expense) || 0) +
+          (Number(form.transport_expense) || 0) + (Number(form.subscription_expense) || 0);
+        const remaining = total - parts;
+        if (remaining >= 0) updateField('other_expense', remaining);
+      };
+
+      return (
+        <PageContainer>
+          <div className="max-w-2xl mx-auto">
+            <div className="text-center mb-8 animate-fade-in-up">
+              <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3">
+                익명 <span className="bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent">연봉/지출</span> 비교
+              </h1>
+              <p className="text-gray-400">나의 소득과 지출을 익명으로 공유하고, 다른 사람들과 비교해보세요.</p>
+            </div>
+
+            <form onSubmit={handleSubmit}>
+              <Card className="mb-6 animate-fade-in-up stagger-1">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-8 h-8 bg-violet-600/20 rounded-lg flex items-center justify-center text-sm">💵</span>
+                  소득 / 지출
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input label="월 소득" type="number" value={form.monthly_salary}
+                    onChange={e => updateField('monthly_salary', e.target.value)}
+                    placeholder="350" suffix="만원" error={errors.monthly_salary} min="0" />
+                  <Input label="월 총 지출" type="number" value={form.monthly_expense}
+                    onChange={e => updateField('monthly_expense', e.target.value)}
+                    placeholder="200" suffix="만원" error={errors.monthly_expense} min="0" />
+                </div>
+              </Card>
+
+              <Card className="mb-6 animate-fade-in-up stagger-2">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <span className="w-8 h-8 bg-violet-600/20 rounded-lg flex items-center justify-center text-sm">📋</span>
+                    지출 세부 항목
+                  </h3>
+                  <button type="button" onClick={autoFillOther}
+                    className="text-xs text-violet-400 hover:text-violet-300 transition-colors">
+                    나머지 자동 계산
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <Input label="식비" type="number" value={form.food_expense}
+                    onChange={e => updateField('food_expense', e.target.value)} suffix="만원" min="0" />
+                  <Input label="주거비" type="number" value={form.housing_expense}
+                    onChange={e => updateField('housing_expense', e.target.value)} suffix="만원" min="0" />
+                  <Input label="교통비" type="number" value={form.transport_expense}
+                    onChange={e => updateField('transport_expense', e.target.value)} suffix="만원" min="0" />
+                  <Input label="구독료" type="number" value={form.subscription_expense}
+                    onChange={e => updateField('subscription_expense', e.target.value)} suffix="만원" min="0" />
+                  <Input label="기타" type="number" value={form.other_expense}
+                    onChange={e => updateField('other_expense', e.target.value)} suffix="만원" min="0" />
+                </div>
+                {errors.breakdown && <p className="text-xs text-amber-400 mt-2">{errors.breakdown}</p>}
+              </Card>
+
+              <Card className="mb-6 animate-fade-in-up stagger-3">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-8 h-8 bg-violet-600/20 rounded-lg flex items-center justify-center text-sm">👤</span>
+                  기본 정보
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Select label="거주 지역" value={form.region}
+                    onChange={e => updateField('region', e.target.value)}
+                    options={REGIONS} placeholder="선택" error={errors.region} />
+                  <Select label="직군" value={form.job_category}
+                    onChange={e => updateField('job_category', e.target.value)}
+                    options={JOB_CATEGORIES} placeholder="선택" error={errors.job_category} />
+                  <Input label="연차" type="number" value={form.years_of_experience}
+                    onChange={e => updateField('years_of_experience', e.target.value)}
+                    placeholder="0" suffix="년" error={errors.years_of_experience} min="0" max="40" />
+                </div>
+              </Card>
+
+              <Card className="mb-8 animate-fade-in-up stagger-4">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-8 h-8 bg-violet-600/20 rounded-lg flex items-center justify-center text-sm">📺</span>
+                  구독 서비스
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {SUBSCRIPTIONS.map(sub => (
+                    <Checkbox key={sub} label={sub}
+                      checked={form.subscriptions.includes(sub)}
+                      onChange={() => toggleSubscription(sub)} />
+                  ))}
+                </div>
+              </Card>
+
+              <div className="animate-fade-in-up stagger-5">
+                <Button type="submit" size="lg" disabled={submitting} className="w-full">
+                  {submitting ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      제출 중...
+                    </span>
+                  ) : '제출하고 내 위치 확인하기'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </PageContainer>
+      );
+    }
+
+    // ========================================
+    // Page: Result (#/result)
+    // ========================================
+    function ResultPage() {
+      const { navigate } = useRouter();
+      const [myData, setMyData] = useState(null);
+      const [comparison, setComparison] = useState(null);
+      const [distribution, setDistribution] = useState(null);
+      const [loading, setLoading] = useState(true);
+
+      const bellCanvasRef = useRef(null);
+      const salaryDistCanvasRef = useRef(null);
+      const expenseDistCanvasRef = useRef(null);
+      const donutCanvasRef = useRef(null);
+
+      const bellChartRef = useRef(null);
+      const salaryDistChartRef = useRef(null);
+      const expenseDistChartRef = useRef(null);
+      const donutChartRef = useRef(null);
+
+      useEffect(() => {
+        const stored = sessionStorage.getItem('myData');
+        if (!stored) {
+          navigate('/submit');
+          return;
+        }
+        const data = JSON.parse(stored);
+        setMyData(data);
+
+        (async () => {
+          try {
+            const params = new URLSearchParams({
+              salary: data.monthly_salary,
+              expense: data.monthly_expense,
+              region: data.region,
+              job_category: data.job_category,
+              years: data.years_of_experience
+            });
+            const [compRes, statsRes, distRes] = await Promise.all([
+              apiFetch(`/api/compare?${params}`),
+              apiFetch('/api/stats'),
+              apiFetch('/api/distribution')
+            ]);
+            const sd = statsRes.data;
+            setComparison({
+              total_count: sd.total_count,
+              salary_percentile: compRes.data.salary_percentile,
+              expense_percentile: compRes.data.expense_percentile,
+              avg_salary: sd.avg_salary,
+              avg_expense: sd.avg_expense,
+              salary_mean: sd.avg_salary,
+              salary_stddev: sd.stddev_salary || Math.round(sd.avg_salary * 0.25),
+            });
+            setDistribution(distRes.data);
+          } catch (err) {
+            console.error(err);
+          } finally {
+            setLoading(false);
+          }
+        })();
+      }, []);
+
+      // Bell curve chart
+      useEffect(() => {
+        if (!bellCanvasRef.current || !comparison || !myData) return;
+        if (bellChartRef.current) bellChartRef.current.destroy();
+
+        const mean = comparison.salary_mean;
+        const stddev = comparison.salary_stddev;
+        const gaussian = (x) => (1 / (stddev * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((x - mean) / stddev, 2));
+
+        const minX = Math.max(0, mean - 3.5 * stddev);
+        const maxX = mean + 3.5 * stddev;
+        const step = (maxX - minX) / 100;
+        const labels = [];
+        const values = [];
+        const bgColors = [];
+        const userSalary = myData.monthly_salary;
+
+        for (let x = minX; x <= maxX; x += step) {
+          labels.push(Math.round(x));
+          values.push(gaussian(x));
+          bgColors.push(x <= userSalary ? 'rgba(124, 58, 237, 0.3)' : 'rgba(124, 58, 237, 0.05)');
+        }
+
+        // Find user position index
+        const userIdx = labels.findIndex(l => l >= userSalary);
+        const pointRadii = labels.map((_, i) => Math.abs(i - userIdx) < 2 ? 6 : 0);
+        const pointBg = labels.map((_, i) => Math.abs(i - userIdx) < 2 ? '#f59e0b' : 'transparent');
+
+        bellChartRef.current = new Chart(bellCanvasRef.current, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: '소득 분포 밀도',
+              data: values,
+              borderColor: '#7c3aed',
+              backgroundColor: 'rgba(124, 58, 237, 0.15)',
+              fill: true,
+              tension: 0.4,
+              pointRadius: pointRadii,
+              pointBackgroundColor: pointBg,
+              pointBorderColor: pointBg,
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  title: (items) => `${items[0].label}만원`,
+                  label: () => ''
+                }
+              },
+              annotation: undefined
+            },
+            scales: {
+              x: {
+                title: { display: true, text: '월 소득 (만원)', color: '#9ca3af' },
+                ticks: { color: '#9ca3af', maxTicksLimit: 10, callback: v => `${v}` },
+                grid: { color: 'rgba(255,255,255,0.05)' }
+              },
+              y: {
+                display: false
+              }
+            }
+          }
+        });
+
+        return () => { if (bellChartRef.current) { bellChartRef.current.destroy(); bellChartRef.current = null; } };
+      }, [comparison, myData]);
+
+      // Salary distribution bar chart
+      useEffect(() => {
+        if (!salaryDistCanvasRef.current || !distribution || !myData) return;
+        if (salaryDistChartRef.current) salaryDistChartRef.current.destroy();
+
+        const dist = distribution.salary_distribution;
+        const userBracket = dist.findIndex(b => myData.monthly_salary >= b.min && myData.monthly_salary < b.max);
+        const colors = dist.map((_, i) => i === userBracket ? 'rgba(245, 158, 11, 0.8)' : 'rgba(124, 58, 237, 0.6)');
+        const borderColors = dist.map((_, i) => i === userBracket ? '#f59e0b' : '#7c3aed');
+
+        salaryDistChartRef.current = new Chart(salaryDistCanvasRef.current, {
+          type: 'bar',
+          data: {
+            labels: dist.map(b => b.label),
+            datasets: [{
+              label: '인원 수',
+              data: dist.map(b => b.count),
+              backgroundColor: colors,
+              borderColor: borderColors,
+              borderWidth: 1,
+              borderRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { title: (items) => `${items[0].label}만원`, label: (item) => `${item.raw}명` } }
+            },
+            scales: {
+              x: { ticks: { color: '#9ca3af', font: { size: 10 } }, grid: { display: false } },
+              y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            }
+          }
+        });
+
+        return () => { if (salaryDistChartRef.current) { salaryDistChartRef.current.destroy(); salaryDistChartRef.current = null; } };
+      }, [distribution, myData]);
+
+      // Expense distribution bar chart
+      useEffect(() => {
+        if (!expenseDistCanvasRef.current || !distribution || !myData) return;
+        if (expenseDistChartRef.current) expenseDistChartRef.current.destroy();
+
+        const dist = distribution.expense_distribution;
+        const userBracket = dist.findIndex(b => myData.monthly_expense >= b.min && myData.monthly_expense < b.max);
+        const colors = dist.map((_, i) => i === userBracket ? 'rgba(245, 158, 11, 0.8)' : 'rgba(79, 70, 229, 0.6)');
+        const borderColors = dist.map((_, i) => i === userBracket ? '#f59e0b' : '#4f46e5');
+
+        expenseDistChartRef.current = new Chart(expenseDistCanvasRef.current, {
+          type: 'bar',
+          data: {
+            labels: dist.map(b => b.label),
+            datasets: [{
+              label: '인원 수',
+              data: dist.map(b => b.count),
+              backgroundColor: colors,
+              borderColor: borderColors,
+              borderWidth: 1,
+              borderRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { title: (items) => `${items[0].label}만원`, label: (item) => `${item.raw}명` } }
+            },
+            scales: {
+              x: { ticks: { color: '#9ca3af', font: { size: 10 } }, grid: { display: false } },
+              y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            }
+          }
+        });
+
+        return () => { if (expenseDistChartRef.current) { expenseDistChartRef.current.destroy(); expenseDistChartRef.current = null; } };
+      }, [distribution, myData]);
+
+      // Donut chart
+      useEffect(() => {
+        if (!donutCanvasRef.current || !myData) return;
+        if (donutChartRef.current) donutChartRef.current.destroy();
+
+        const breakdown = [
+          { label: '식비', value: myData.food_expense, color: '#f472b6' },
+          { label: '주거비', value: myData.housing_expense, color: '#a78bfa' },
+          { label: '교통비', value: myData.transport_expense, color: '#60a5fa' },
+          { label: '구독료', value: myData.subscription_expense, color: '#34d399' },
+          { label: '기타', value: myData.other_expense, color: '#fbbf24' }
+        ].filter(b => b.value > 0);
+
+        if (breakdown.length === 0) return;
+
+        donutChartRef.current = new Chart(donutCanvasRef.current, {
+          type: 'doughnut',
+          data: {
+            labels: breakdown.map(b => b.label),
+            datasets: [{
+              data: breakdown.map(b => b.value),
+              backgroundColor: breakdown.map(b => b.color),
+              borderColor: '#1a1a2e',
+              borderWidth: 3,
+              hoverOffset: 10
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { color: '#d1d5db', padding: 16, font: { size: 12 }, usePointStyle: true, pointStyleWidth: 10 }
+              },
+              tooltip: {
+                callbacks: {
+                  label: (item) => {
+                    const total = breakdown.reduce((s, b) => s + b.value, 0);
+                    const pct = Math.round((item.raw / total) * 100);
+                    return `${item.label}: ${item.raw}만원 (${pct}%)`;
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        return () => { if (donutChartRef.current) { donutChartRef.current.destroy(); donutChartRef.current = null; } };
+      }, [myData]);
+
+      if (loading) return <PageContainer><Spinner size="lg" /></PageContainer>;
+      if (!myData || !comparison) return <PageContainer><p className="text-gray-400 text-center">데이터가 없습니다. 먼저 제출해주세요.</p></PageContainer>;
+
+      const savingsRate = Math.round(((myData.monthly_salary - myData.monthly_expense) / myData.monthly_salary) * 100);
+
+      return (
+        <PageContainer>
+          <div className="text-center mb-8 animate-fade-in-up">
+            <h1 className="text-3xl font-bold text-white mb-2">내 위치 분석 결과</h1>
+            <p className="text-gray-400">전체 {comparison.total_count}명 참여자 중 나의 위치입니다</p>
+          </div>
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <Card className="animate-fade-in-up stagger-1 text-center" glow>
+              <p className="text-sm text-gray-400 mb-1">소득 상위</p>
+              <p className="text-3xl font-bold bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent">
+                {100 - comparison.salary_percentile}%
+              </p>
+            </Card>
+            <Card className="animate-fade-in-up stagger-2 text-center" glow>
+              <p className="text-sm text-gray-400 mb-1">지출 하위</p>
+              <p className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+                {comparison.expense_percentile}%
+              </p>
+            </Card>
+            <Card className="animate-fade-in-up stagger-3 text-center">
+              <p className="text-sm text-gray-400 mb-1">내 소득 / 평균</p>
+              <p className="text-xl font-bold text-white">{myData.monthly_salary}<span className="text-sm text-gray-500">만원</span></p>
+              <p className="text-sm text-gray-500">vs {comparison.avg_salary}만원</p>
+            </Card>
+            <Card className="animate-fade-in-up stagger-4 text-center">
+              <p className="text-sm text-gray-400 mb-1">내 지출 / 평균</p>
+              <p className="text-xl font-bold text-white">{myData.monthly_expense}<span className="text-sm text-gray-500">만원</span></p>
+              <p className="text-sm text-gray-500">vs {comparison.avg_expense}만원</p>
+            </Card>
+          </div>
+
+          {/* Savings Rate */}
+          <Card className="mb-8 animate-fade-in-up stagger-5 text-center">
+            <p className="text-sm text-gray-400 mb-1">나의 저축률</p>
+            <p className={`text-4xl font-bold ${savingsRate >= 30 ? 'text-emerald-400' : savingsRate >= 10 ? 'text-amber-400' : 'text-red-400'}`}>
+              {savingsRate}%
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              {savingsRate >= 30 ? '훌륭한 저축률입니다!' : savingsRate >= 10 ? '적절한 저축률이에요' : '지출을 줄여보는 건 어떨까요?'}
+            </p>
+          </Card>
+
+          {/* Bell Curve */}
+          <Card className="mb-8 animate-fade-in-up">
+            <SectionTitle>정규분포 곡선 - 소득 분포</SectionTitle>
+            <p className="text-sm text-gray-400 mb-4">노란색 점이 나의 위치입니다. 보라색 영역은 나보다 소득이 낮은 구간입니다.</p>
+            <div className="h-64 sm:h-80">
+              <canvas ref={bellCanvasRef}></canvas>
+            </div>
+          </Card>
+
+          {/* Salary Distribution */}
+          <Card className="mb-8 animate-fade-in-up">
+            <SectionTitle>소득 분포 막대 차트</SectionTitle>
+            <p className="text-sm text-gray-400 mb-4">노란색 막대가 나의 구간입니다 (단위: 만원)</p>
+            <div className="h-64 sm:h-72">
+              <canvas ref={salaryDistCanvasRef}></canvas>
+            </div>
+          </Card>
+
+          {/* Expense Distribution */}
+          <Card className="mb-8 animate-fade-in-up">
+            <SectionTitle>지출 분포 막대 차트</SectionTitle>
+            <p className="text-sm text-gray-400 mb-4">노란색 막대가 나의 구간입니다 (단위: 만원)</p>
+            <div className="h-64 sm:h-72">
+              <canvas ref={expenseDistCanvasRef}></canvas>
+            </div>
+          </Card>
+
+          {/* My Expense Donut */}
+          <Card className="mb-8 animate-fade-in-up">
+            <SectionTitle>내 지출 구성</SectionTitle>
+            <div className="h-72 sm:h-80">
+              <canvas ref={donutCanvasRef}></canvas>
+            </div>
+          </Card>
+
+          <div className="text-center">
+            <Link to="/stats" className="inline-block">
+              <Button variant="secondary" size="lg">전체 통계 보러가기 →</Button>
+            </Link>
+          </div>
+        </PageContainer>
+      );
+    }
+
+    // ========================================
+    // Page: Stats (#/stats)
+    // ========================================
+    function StatsPage() {
+      const [stats, setStats] = useState(null);
+      const [regionData, setRegionData] = useState(null);
+      const [subData, setSubData] = useState(null);
+      const [loading, setLoading] = useState(true);
+
+      const regionCanvasRef = useRef(null);
+      const categoryCanvasRef = useRef(null);
+      const subCanvasRef = useRef(null);
+
+      const regionChartRef = useRef(null);
+      const categoryChartRef = useRef(null);
+      const subChartRef = useRef(null);
+
+      useEffect(() => {
+        (async () => {
+          try {
+            const [statsRes, regionRes, subRes] = await Promise.all([
+              apiFetch('/api/stats'),
+              apiFetch('/api/by-region'),
+              apiFetch('/api/subscriptions')
+            ]);
+            const sd = statsRes.data;
+            setStats({
+              total_count: sd.total_count,
+              avg_salary: sd.avg_salary,
+              avg_expense: sd.avg_expense,
+              avg_savings_rate: sd.avg_salary ? Math.round(((sd.avg_salary - sd.avg_expense) / sd.avg_salary) * 100) : 0,
+              category_averages: {
+                food: sd.avg_food,
+                housing: sd.avg_housing,
+                transport: sd.avg_transport,
+                subscription: sd.avg_subscription,
+                other: sd.avg_other
+              }
+            });
+            setRegionData(regionRes.data);
+            setSubData(subRes.data.map(s => ({ name: s.service, count: s.count, percentage: s.percentage })));
+          } catch (err) {
+            console.error(err);
+          } finally {
+            setLoading(false);
+          }
+        })();
+      }, []);
+
+      // Region bar chart
+      useEffect(() => {
+        if (!regionCanvasRef.current || !regionData) return;
+        if (regionChartRef.current) regionChartRef.current.destroy();
+
+        regionChartRef.current = new Chart(regionCanvasRef.current, {
+          type: 'bar',
+          data: {
+            labels: regionData.map(r => r.region),
+            datasets: [
+              {
+                label: '평균 소득',
+                data: regionData.map(r => r.avg_salary),
+                backgroundColor: 'rgba(124, 58, 237, 0.7)',
+                borderColor: '#7c3aed',
+                borderWidth: 1,
+                borderRadius: 4
+              },
+              {
+                label: '평균 지출',
+                data: regionData.map(r => r.avg_expense),
+                backgroundColor: 'rgba(79, 70, 229, 0.4)',
+                borderColor: '#4f46e5',
+                borderWidth: 1,
+                borderRadius: 4
+              }
+            ]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: '#d1d5db', padding: 16 } },
+              tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${item.raw}만원` } }
+            },
+            scales: {
+              x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+              y: { ticks: { color: '#d1d5db', font: { size: 11 } }, grid: { display: false } }
+            }
+          }
+        });
+
+        return () => { if (regionChartRef.current) { regionChartRef.current.destroy(); regionChartRef.current = null; } };
+      }, [regionData]);
+
+      // Category bar chart
+      useEffect(() => {
+        if (!categoryCanvasRef.current || !stats) return;
+        if (categoryChartRef.current) categoryChartRef.current.destroy();
+
+        const cats = stats.category_averages;
+        const labels = ['식비', '주거비', '교통비', '구독료', '기타'];
+        const values = [cats.food, cats.housing, cats.transport, cats.subscription, cats.other];
+        const total = values.reduce((a, b) => a + b, 0);
+        const colors = ['#f472b6', '#a78bfa', '#60a5fa', '#34d399', '#fbbf24'];
+
+        categoryChartRef.current = new Chart(categoryCanvasRef.current, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: '평균 지출',
+              data: values,
+              backgroundColor: colors.map(c => c + 'cc'),
+              borderColor: colors,
+              borderWidth: 1,
+              borderRadius: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (item) => {
+                    const pct = Math.round((item.raw / total) * 100);
+                    return `${item.raw}만원 (${pct}%)`;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { ticks: { color: '#d1d5db' }, grid: { display: false } },
+              y: { ticks: { color: '#9ca3af', callback: v => `${v}만원` }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            }
+          }
+        });
+
+        return () => { if (categoryChartRef.current) { categoryChartRef.current.destroy(); categoryChartRef.current = null; } };
+      }, [stats]);
+
+      // Subscription chart
+      useEffect(() => {
+        if (!subCanvasRef.current || !subData) return;
+        if (subChartRef.current) subChartRef.current.destroy();
+
+        const top = subData.filter(s => s.count > 0);
+
+        subChartRef.current = new Chart(subCanvasRef.current, {
+          type: 'bar',
+          data: {
+            labels: top.map(s => s.name),
+            datasets: [{
+              label: '이용자 수',
+              data: top.map(s => s.count),
+              backgroundColor: top.map((_, i) => {
+                const hue = 260 + (i * 15) % 60;
+                return `hsla(${hue}, 70%, 60%, 0.7)`;
+              }),
+              borderRadius: 4,
+              borderSkipped: false
+            }]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (item) => {
+                    const s = top[item.dataIndex];
+                    return `${s.count}명 (${s.percentage}%)`;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+              y: { ticks: { color: '#d1d5db', font: { size: 11 } }, grid: { display: false } }
+            }
+          }
+        });
+
+        return () => { if (subChartRef.current) { subChartRef.current.destroy(); subChartRef.current = null; } };
+      }, [subData]);
+
+      if (loading) return <PageContainer><Spinner size="lg" /></PageContainer>;
+      if (!stats) return <PageContainer><p className="text-gray-400 text-center">통계를 불러오지 못했습니다.</p></PageContainer>;
+
+      return (
+        <PageContainer>
+          <div className="text-center mb-8 animate-fade-in-up">
+            <h1 className="text-3xl font-bold text-white mb-2">전체 통계</h1>
+            <p className="text-gray-400">커뮤니티 전체의 소득/지출 통계입니다</p>
+          </div>
+
+          {/* Summary Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <StatCard icon="👥" label="총 참여자" value={stats.total_count} unit="명" accent />
+            <StatCard icon="💰" label="평균 소득" value={stats.avg_salary} unit="만원" />
+            <StatCard icon="💸" label="평균 지출" value={stats.avg_expense} unit="만원" />
+            <StatCard icon="🏦" label="평균 저축률" value={stats.avg_savings_rate} unit="%" accent />
+          </div>
+
+          {/* Region Chart */}
+          <Card className="mb-8 animate-fade-in-up">
+            <SectionTitle>지역별 평균 소득/지출</SectionTitle>
+            <div style={{ height: Math.max(400, regionData.length * 35) + 'px' }}>
+              <canvas ref={regionCanvasRef}></canvas>
+            </div>
+          </Card>
+
+          {/* Category Chart */}
+          <Card className="mb-8 animate-fade-in-up">
+            <SectionTitle>카테고리별 평균 지출 비교</SectionTitle>
+            <div className="h-64 sm:h-80">
+              <canvas ref={categoryCanvasRef}></canvas>
+            </div>
+            <div className="grid grid-cols-5 gap-2 mt-4">
+              {[
+                { label: '식비', value: stats.category_averages.food, color: 'bg-pink-400' },
+                { label: '주거비', value: stats.category_averages.housing, color: 'bg-violet-400' },
+                { label: '교통비', value: stats.category_averages.transport, color: 'bg-blue-400' },
+                { label: '구독료', value: stats.category_averages.subscription, color: 'bg-emerald-400' },
+                { label: '기타', value: stats.category_averages.other, color: 'bg-amber-400' }
+              ].map(cat => (
+                <div key={cat.label} className="text-center">
+                  <div className={`w-3 h-3 rounded-full ${cat.color} mx-auto mb-1`}></div>
+                  <p className="text-xs text-gray-400">{cat.label}</p>
+                  <p className="text-sm font-semibold text-white">{cat.value}만원</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Subscription Chart */}
+          <Card className="mb-8 animate-fade-in-up">
+            <SectionTitle>구독 서비스 이용률</SectionTitle>
+            <div style={{ height: Math.max(300, subData.filter(s => s.count > 0).length * 30) + 'px' }}>
+              <canvas ref={subCanvasRef}></canvas>
+            </div>
+          </Card>
+        </PageContainer>
+      );
+    }
+
+    // ========================================
+    // Page: List (#/list)
+    // ========================================
+    function ListPage() {
+      const [data, setData] = useState([]);
+      const [page, setPage] = useState(1);
+      const [totalPages, setTotalPages] = useState(1);
+      const [totalCount, setTotalCount] = useState(0);
+      const [sort, setSort] = useState('monthly_salary');
+      const [order, setOrder] = useState('desc');
+      const [loading, setLoading] = useState(true);
+
+      const fetchData = useCallback(async (s, o, p) => {
+        setLoading(true);
+        try {
+          const sortMap = { monthly_salary: 'salary', monthly_expense: 'expense', years_of_experience: 'years' };
+          const apiSort = sortMap[s] || 'salary';
+          const res = await apiFetch(`/api/list?sort=${apiSort}&order=${o}&page=${p}&limit=20`);
+          setData(res.data);
+          setTotalPages(Math.ceil(res.total / 20));
+          setTotalCount(res.total);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      useEffect(() => {
+        fetchData(sort, order, page);
+      }, [sort, order, page]);
+
+      const handleSort = (field) => {
+        if (sort === field) {
+          setOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+        } else {
+          setSort(field);
+          setOrder('desc');
+        }
+        setPage(1);
+      };
+
+      const SortButton = ({ field, label }) => {
+        const isActive = sort === field;
+        return (
+          <button onClick={() => handleSort(field)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap
+              ${isActive ? 'bg-violet-600/30 text-violet-300 border border-violet-500/30' : 'bg-gray-800/50 text-gray-400 hover:text-white border border-gray-700/50'}`}>
+            {label} {isActive && (order === 'desc' ? '↓' : '↑')}
+          </button>
+        );
+      };
+
+      return (
+        <PageContainer>
+          <div className="text-center mb-8 animate-fade-in-up">
+            <h1 className="text-3xl font-bold text-white mb-2">데이터 목록</h1>
+            <p className="text-gray-400">전체 {totalCount}건의 익명 데이터</p>
+          </div>
+
+          {/* Sort Controls */}
+          <Card className="mb-6 animate-fade-in-up">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm text-gray-400 mr-2">정렬:</span>
+              <SortButton field="monthly_salary" label="월소득" />
+              <SortButton field="monthly_expense" label="월지출" />
+              <SortButton field="years_of_experience" label="연차" />
+            </div>
+          </Card>
+
+          {loading ? <Spinner /> : (
+            <>
+              {/* Desktop Table */}
+              <div className="hidden md:block overflow-x-auto mb-6">
+                <Card className="p-0 overflow-hidden animate-fade-in-up">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-800">
+                        <th className="px-4 py-3 text-left text-gray-400 font-medium">지역</th>
+                        <th className="px-4 py-3 text-left text-gray-400 font-medium">직군</th>
+                        <th className="px-4 py-3 text-right text-gray-400 font-medium">연차</th>
+                        <th className="px-4 py-3 text-right text-gray-400 font-medium">월소득</th>
+                        <th className="px-4 py-3 text-right text-gray-400 font-medium">월지출</th>
+                        <th className="px-4 py-3 text-right text-gray-400 font-medium">저축률</th>
+                        <th className="px-4 py-3 text-right text-gray-400 font-medium">구독수</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.map((item, i) => {
+                        const sr = Math.round(((item.monthly_salary - item.monthly_expense) / item.monthly_salary) * 100);
+                        const subs = Array.isArray(item.subscriptions) ? item.subscriptions : [];
+                        return (
+                          <tr key={i} className="border-b border-gray-800/50 hover:bg-white/[0.02] transition-colors animate-slide-in"
+                            style={{ animationDelay: `${i * 30}ms`, opacity: 0 }}>
+                            <td className="px-4 py-3 text-gray-300">{item.region}</td>
+                            <td className="px-4 py-3 text-gray-300">{item.job_category}</td>
+                            <td className="px-4 py-3 text-right text-gray-300">{item.years_of_experience}년</td>
+                            <td className="px-4 py-3 text-right text-white font-medium">{item.monthly_salary}만원</td>
+                            <td className="px-4 py-3 text-right text-gray-300">{item.monthly_expense}만원</td>
+                            <td className={`px-4 py-3 text-right font-medium ${sr >= 30 ? 'text-emerald-400' : sr >= 10 ? 'text-amber-400' : 'text-red-400'}`}>
+                              {sr}%
+                            </td>
+                            <td className="px-4 py-3 text-right text-gray-400">{subs.length}개</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </Card>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-3 mb-6">
+                {data.map((item, i) => {
+                  const sr = Math.round(((item.monthly_salary - item.monthly_expense) / item.monthly_salary) * 100);
+                  const subs = Array.isArray(item.subscriptions) ? item.subscriptions : [];
+                  return (
+                    <Card key={i} className="animate-slide-in" style={{ animationDelay: `${i * 30}ms`, opacity: 0 }}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs bg-violet-600/20 text-violet-300 px-2 py-0.5 rounded-full">{item.region}</span>
+                          <span className="text-xs bg-gray-700/50 text-gray-300 px-2 py-0.5 rounded-full">{item.job_category}</span>
+                        </div>
+                        <span className="text-xs text-gray-500">{item.years_of_experience}년차</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div>
+                          <p className="text-xs text-gray-500">소득</p>
+                          <p className="text-sm font-semibold text-white">{item.monthly_salary}만원</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">지출</p>
+                          <p className="text-sm font-semibold text-gray-300">{item.monthly_expense}만원</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">저축률</p>
+                          <p className={`text-sm font-semibold ${sr >= 30 ? 'text-emerald-400' : sr >= 10 ? 'text-amber-400' : 'text-red-400'}`}>{sr}%</p>
+                        </div>
+                      </div>
+                      {subs.length > 0 && (
+                        <p className="text-xs text-gray-500 mt-2">구독: {subs.length}개</p>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* Pagination */}
+              <div className="flex items-center justify-center gap-2">
+                <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
+                  ← 이전
+                </Button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => Math.abs(p - page) <= 2 || p === 1 || p === totalPages)
+                  .reduce((acc, p, i, arr) => {
+                    if (i > 0 && p - arr[i - 1] > 1) acc.push('...');
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, i) =>
+                    p === '...' ? (
+                      <span key={`dots-${i}`} className="text-gray-600 px-1">...</span>
+                    ) : (
+                      <button key={p} onClick={() => setPage(p)}
+                        className={`w-8 h-8 rounded-lg text-sm font-medium transition-all
+                          ${page === p ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+                        {p}
+                      </button>
+                    )
+                  )}
+                <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>
+                  다음 →
+                </Button>
+              </div>
+            </>
+          )}
+        </PageContainer>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const { path } = useRouter();
+
+      const renderPage = () => {
+        switch (path) {
+          case '/submit': return <SubmitPage />;
+          case '/result': return <ResultPage />;
+          case '/stats': return <StatsPage />;
+          case '/list': return <ListPage />;
+          default: return <SubmitPage />;
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-[#0f0f0f] text-white">
+          <Header />
+          {renderPage()}
+          <footer className="text-center py-8 text-gray-600 text-sm border-t border-gray-800/50">
+            <p>myAnonymousSalary - 모든 데이터는 익명으로 처리됩니다</p>
+          </footer>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(
+      <Router>
+        <App />
+      </Router>
+    );
+  </script>
+</body>
+</html>
