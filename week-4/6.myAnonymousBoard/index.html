@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>익명 게시판</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #e0e7ff 0%, #f0f4ff 40%, #fdf2f8 100%);
+      min-height: 100vh;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.3s ease-out;
+    }
+    @keyframes toastSlide {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-toast {
+      animation: toastSlide 0.25s ease-out;
+    }
+    @keyframes pulse-btn {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+    }
+    .animate-pulse-btn {
+      animation: pulse-btn 0.3s ease-in-out;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks Destructuring
+    // ========================================
+    const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+    // ========================================
+    // Constants & Utilities
+    // ========================================
+    const API_BASE_URL = '/api';
+
+    const CATEGORIES = [
+      { value: '고민', label: '고민', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+      { value: '칭찬', label: '칭찬', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+      { value: '응원', label: '응원', color: 'bg-green-100 text-green-700 border-green-200' },
+      { value: '일상', label: '일상', color: 'bg-purple-100 text-purple-700 border-purple-200' },
+      { value: '비밀', label: '비밀', color: 'bg-pink-100 text-pink-700 border-pink-200' },
+    ];
+
+    const SORT_TABS = [
+      { value: 'latest', label: '최신순' },
+      { value: 'empathy', label: '공감순' },
+      { value: 'oldest', label: '오래된순' },
+      { value: 'best', label: '베스트' },
+    ];
+
+    function getCategoryStyle(category) {
+      const cat = CATEGORIES.find(c => c.value === category);
+      return cat ? cat.color : 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+
+    function timeAgo(dateStr) {
+      const now = new Date();
+      const date = new Date(dateStr);
+      const diff = Math.floor((now - date) / 1000);
+
+      if (diff < 60) return '방금 전';
+      if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
+      if (diff < 172800) return '어제';
+      if (diff < 604800) return `${Math.floor(diff / 86400)}일 전`;
+      return date.toLocaleDateString('ko-KR');
+    }
+
+    function getTotalReactions(post) {
+      return post.empathy_count + post.cheer_count + post.praise_count;
+    }
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function Button({ children, variant = 'primary', size = 'md', disabled = false, onClick, className = '', type = 'button' }) {
+      const base = 'font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
+      const variants = {
+        primary: 'bg-indigo-500 hover:bg-indigo-600 text-white focus:ring-indigo-400 shadow-md hover:shadow-lg',
+        secondary: 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 focus:ring-gray-300',
+        ghost: 'bg-transparent hover:bg-gray-100 text-gray-600 focus:ring-gray-300',
+      };
+      const sizes = {
+        sm: 'px-3 py-1.5 text-sm',
+        md: 'px-5 py-2.5 text-base',
+        lg: 'px-7 py-3 text-lg',
+      };
+      return (
+        <button
+          type={type}
+          disabled={disabled}
+          onClick={onClick}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Card({ children, className = '', id }) {
+      return (
+        <div id={id} className={`bg-white/80 backdrop-blur-sm rounded-2xl shadow-md border border-white/60 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Badge({ children, className = '' }) {
+      return (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Toast({ message, visible }) {
+      if (!visible) return null;
+      return (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-toast">
+          <div className="bg-gray-800 text-white px-5 py-3 rounded-xl shadow-xl text-sm font-medium">
+            {message}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Header Component
+    // ========================================
+    function Header() {
+      return (
+        <header className="text-center pt-10 pb-6">
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 tracking-tight">
+            익명 게시판
+          </h1>
+          <p className="mt-2 text-gray-500 text-base sm:text-lg">당신의 이야기를 나눠요</p>
+        </header>
+      );
+    }
+
+    // ========================================
+    // Post Form Component
+    // ========================================
+    function PostForm({ onSubmit }) {
+      const [category, setCategory] = useState('고민');
+      const [content, setContent] = useState('');
+      const [submitting, setSubmitting] = useState(false);
+      const [error, setError] = useState('');
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!content.trim()) {
+          setError('내용을 입력해주세요.');
+          return;
+        }
+        setError('');
+        setSubmitting(true);
+        try {
+          const res = await fetch(`${API_BASE_URL}/posts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category, content: content.trim() }),
+          });
+          const json = await res.json();
+          if (!res.ok || !json.success) {
+            throw new Error(json.message || '게시글 작성에 실패했습니다.');
+          }
+          onSubmit(json.data);
+          setContent('');
+          setCategory('고민');
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      return (
+        <Card className="p-5 sm:p-6 mb-6">
+          <form onSubmit={handleSubmit}>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="category">
+                카테고리
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORIES.map(cat => (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setCategory(cat.value)}
+                    className={`px-3.5 py-1.5 rounded-full text-sm font-medium border transition-all duration-200 cursor-pointer ${
+                      category === cat.value
+                        ? cat.color + ' ring-2 ring-offset-1 ring-indigo-300 scale-105'
+                        : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="content">
+                내용
+              </label>
+              <textarea
+                id="content"
+                value={content}
+                onChange={(e) => {
+                  if (e.target.value.length <= 500) setContent(e.target.value);
+                }}
+                placeholder="여기에 이야기를 적어주세요..."
+                rows={4}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent resize-none text-gray-700 placeholder-gray-400 transition-all"
+              />
+              <div className="flex justify-between items-center mt-1">
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <span className={`text-xs ml-auto ${content.length >= 480 ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                  {content.length}/500
+                </span>
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              disabled={submitting || !content.trim()}
+              className="w-full"
+            >
+              {submitting ? '올리는 중...' : '익명으로 올리기'}
+            </Button>
+          </form>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // Sort Tabs Component
+    // ========================================
+    function SortTabs({ activeSort, onSortChange }) {
+      return (
+        <div className="flex gap-1 mb-5 bg-white/60 backdrop-blur-sm p-1.5 rounded-xl border border-white/60 shadow-sm">
+          {SORT_TABS.map(tab => (
+            <button
+              key={tab.value}
+              onClick={() => onSortChange(tab.value)}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
+                activeSort === tab.value
+                  ? 'bg-indigo-500 text-white shadow-md'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-white/80'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Reaction Button Component
+    // ========================================
+    function ReactionButton({ emoji, label, count, onClick }) {
+      const [animating, setAnimating] = useState(false);
+
+      const handleClick = () => {
+        setAnimating(true);
+        onClick();
+        setTimeout(() => setAnimating(false), 300);
+      };
+
+      return (
+        <button
+          onClick={handleClick}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-all duration-200 text-sm cursor-pointer group"
+          aria-label={label}
+        >
+          <span className={`text-base ${animating ? 'animate-pulse-btn' : ''}`}>{emoji}</span>
+          <span className="text-gray-600 font-medium group-hover:text-gray-800">{count}</span>
+        </button>
+      );
+    }
+
+    // ========================================
+    // Post Card Component
+    // ========================================
+    function PostCard({ post, onReact, onShare }) {
+      const isBest = getTotalReactions(post) >= 10;
+
+      return (
+        <Card id={`post-${post.id}`} className="p-5 animate-fade-in">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Badge className={getCategoryStyle(post.category)}>
+                {post.category}
+              </Badge>
+              {isBest && (
+                <Badge className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                  ⭐ 베스트
+                </Badge>
+              )}
+            </div>
+            <span className="text-xs text-gray-400">{timeAgo(post.created_at)}</span>
+          </div>
+
+          <p className="text-gray-700 leading-relaxed whitespace-pre-wrap mb-4 text-[15px]">
+            {post.content}
+          </p>
+
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              <ReactionButton
+                emoji="❤️"
+                label="공감"
+                count={post.empathy_count}
+                onClick={() => onReact(post.id, 'empathy')}
+              />
+              <ReactionButton
+                emoji="🎉"
+                label="응원"
+                count={post.cheer_count}
+                onClick={() => onReact(post.id, 'cheer')}
+              />
+              <ReactionButton
+                emoji="👏"
+                label="칭찬"
+                count={post.praise_count}
+                onClick={() => onReact(post.id, 'praise')}
+              />
+            </div>
+
+            <button
+              onClick={() => onShare(post.id)}
+              className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 cursor-pointer"
+              aria-label="공유하기"
+              title="링크 복사"
+            >
+              🔗
+            </button>
+          </div>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const [posts, setPosts] = useState([]);
+      const [sort, setSort] = useState('latest');
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState('');
+      const [toast, setToast] = useState({ visible: false, message: '' });
+      const scrolledRef = useRef(false);
+
+      const showToast = useCallback((message) => {
+        setToast({ visible: true, message });
+        setTimeout(() => setToast({ visible: false, message: '' }), 2000);
+      }, []);
+
+      const fetchPosts = useCallback(async (sortValue) => {
+        setLoading(true);
+        setError('');
+        try {
+          const res = await fetch(`${API_BASE_URL}/posts?sort=${sortValue}`);
+          const json = await res.json();
+          if (!res.ok || !json.success) {
+            throw new Error(json.message || '게시글을 불러오는데 실패했습니다.');
+          }
+          setPosts(json.data);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      useEffect(() => {
+        fetchPosts(sort);
+      }, [sort, fetchPosts]);
+
+      // Scroll to post on load if hash present
+      useEffect(() => {
+        if (!loading && posts.length > 0 && !scrolledRef.current) {
+          const hash = window.location.hash;
+          if (hash && hash.startsWith('#post-')) {
+            const el = document.getElementById(hash.slice(1));
+            if (el) {
+              setTimeout(() => {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('ring-2', 'ring-indigo-400');
+                setTimeout(() => el.classList.remove('ring-2', 'ring-indigo-400'), 2000);
+              }, 100);
+            }
+            scrolledRef.current = true;
+          }
+        }
+      }, [loading, posts]);
+
+      const handleNewPost = (newPost) => {
+        if (sort === 'latest') {
+          setPosts(prev => [newPost, ...prev]);
+        } else {
+          fetchPosts(sort);
+        }
+        showToast('게시글이 등록되었습니다!');
+      };
+
+      const handleReact = async (postId, type) => {
+        // Optimistic update
+        setPosts(prev =>
+          prev.map(p =>
+            p.id === postId
+              ? { ...p, [`${type}_count`]: p[`${type}_count`] + 1 }
+              : p
+          )
+        );
+
+        try {
+          const res = await fetch(`${API_BASE_URL}/posts/${postId}/react`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type }),
+          });
+          const json = await res.json();
+          if (!res.ok || !json.success) {
+            throw new Error('reaction failed');
+          }
+          // Sync with server data
+          setPosts(prev =>
+            prev.map(p => (p.id === postId ? json.data : p))
+          );
+        } catch {
+          // Rollback on failure
+          setPosts(prev =>
+            prev.map(p =>
+              p.id === postId
+                ? { ...p, [`${type}_count`]: Math.max(0, p[`${type}_count`] - 1) }
+                : p
+            )
+          );
+          showToast('반응에 실패했습니다.');
+        }
+      };
+
+      const handleShare = (postId) => {
+        const url = `${window.location.origin}${window.location.pathname}#post-${postId}`;
+        navigator.clipboard.writeText(url).then(() => {
+          showToast('복사됨!');
+        }).catch(() => {
+          showToast('복사에 실패했습니다.');
+        });
+      };
+
+      const handleSortChange = (newSort) => {
+        setSort(newSort);
+      };
+
+      return (
+        <div className="min-h-screen">
+          <div className="max-w-xl mx-auto px-4 pb-12">
+            <Header />
+            <PostForm onSubmit={handleNewPost} />
+            <SortTabs activeSort={sort} onSortChange={handleSortChange} />
+
+            {loading && (
+              <div className="text-center py-16">
+                <div className="inline-block w-8 h-8 border-4 border-indigo-200 border-t-indigo-500 rounded-full animate-spin"></div>
+                <p className="mt-3 text-gray-400 text-sm">불러오는 중...</p>
+              </div>
+            )}
+
+            {error && !loading && (
+              <Card className="p-6 text-center">
+                <p className="text-red-500 mb-3">{error}</p>
+                <Button variant="secondary" size="sm" onClick={() => fetchPosts(sort)}>
+                  다시 시도
+                </Button>
+              </Card>
+            )}
+
+            {!loading && !error && posts.length === 0 && (
+              <Card className="p-10 text-center">
+                <p className="text-4xl mb-3">📝</p>
+                <p className="text-gray-500">
+                  {sort === 'best' ? '아직 베스트 게시글이 없습니다.' : '아직 게시글이 없습니다.'}
+                </p>
+                <p className="text-gray-400 text-sm mt-1">첫 번째 이야기를 남겨보세요!</p>
+              </Card>
+            )}
+
+            {!loading && !error && posts.length > 0 && (
+              <div className="flex flex-col gap-4">
+                {posts.map(post => (
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    onReact={handleReact}
+                    onShare={handleShare}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Toast message={toast.message} visible={toast.visible} />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

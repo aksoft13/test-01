@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>밸런스 게임</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap');
+    body { font-family: 'Noto Sans KR', sans-serif; }
+    .progress-bar-a { transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+    .progress-bar-b { transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+    .card-hover { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .card-hover:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.4); }
+    .vote-btn { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .vote-btn:hover:not(:disabled) { transform: scale(1.03); }
+    .vote-btn:active:not(:disabled) { transform: scale(0.97); }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    .slide-up { animation: slideUp 0.3s ease-out; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
+    @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 5px rgba(139, 92, 246, 0.3); } 50% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.6); } }
+    .skeleton { background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .toast-enter { animation: toastIn 0.3s ease-out; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } = React;
+
+    // ========================================
+    // API Configuration
+    // ========================================
+    const API_BASE_URL = '/api';
+
+    // ========================================
+    // LocalStorage Helpers
+    // ========================================
+    function getVotedGames() {
+      try {
+        return JSON.parse(localStorage.getItem('voted_games') || '{}');
+      } catch { return {}; }
+    }
+
+    function setVotedGame(gameId, choice) {
+      const voted = getVotedGames();
+      voted[gameId] = choice;
+      localStorage.setItem('voted_games', JSON.stringify(voted));
+    }
+
+    function getLikedGames() {
+      try {
+        return JSON.parse(localStorage.getItem('liked_games') || '[]');
+      } catch { return []; }
+    }
+
+    function toggleLikedGame(gameId) {
+      const liked = getLikedGames();
+      const idx = liked.indexOf(gameId);
+      if (idx === -1) liked.push(gameId);
+      else liked.splice(idx, 1);
+      localStorage.setItem('liked_games', JSON.stringify(liked));
+      return idx === -1; // true = liked, false = unliked
+    }
+
+    // ========================================
+    // Custom Hooks
+    // ========================================
+    function useGames(sort) {
+      const [games, setGames] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+
+      const fetchGames = useCallback(async () => {
+        try {
+          setLoading(true);
+          const res = await fetch(`${API_BASE_URL}/games?sort=${sort}`);
+          if (!res.ok) throw new Error('게임 목록을 불러올 수 없습니다');
+          const data = await res.json();
+          setGames(data.data || data);
+          setError(null);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      }, [sort]);
+
+      useEffect(() => { fetchGames(); }, [fetchGames]);
+
+      return { games, loading, error, refetch: fetchGames };
+    }
+
+    function useGameDetail(gameId) {
+      const [game, setGame] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const intervalRef = useRef(null);
+
+      const fetchGame = useCallback(async () => {
+        if (!gameId) return;
+        try {
+          const res = await fetch(`${API_BASE_URL}/games/${gameId}`);
+          if (!res.ok) throw new Error('게임을 불러올 수 없습니다');
+          const data = await res.json();
+          setGame(data.data || data);
+          setLoading(false);
+        } catch {
+          setLoading(false);
+        }
+      }, [gameId]);
+
+      useEffect(() => {
+        if (!gameId) return;
+        setLoading(true);
+        fetchGame();
+        intervalRef.current = setInterval(fetchGame, 3000);
+        return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+      }, [gameId, fetchGame]);
+
+      return { game, loading, setGame };
+    }
+
+    function useToast() {
+      const [toast, setToast] = useState(null);
+      const timerRef = useRef(null);
+
+      const showToast = useCallback((message, type = 'success') => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        setToast({ message, type });
+        timerRef.current = setTimeout(() => setToast(null), 2500);
+      }, []);
+
+      return { toast, showToast };
+    }
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function Button({ children, variant = 'primary', size = 'md', disabled = false, onClick, className = '', ...props }) {
+      const baseClasses = 'inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900';
+      const variants = {
+        primary: 'bg-purple-600 hover:bg-purple-500 text-white focus:ring-purple-500 disabled:bg-purple-800 disabled:text-purple-400',
+        secondary: 'bg-gray-700 hover:bg-gray-600 text-gray-200 focus:ring-gray-500 disabled:bg-gray-800 disabled:text-gray-500',
+        ghost: 'bg-transparent hover:bg-gray-700/50 text-gray-300 focus:ring-gray-500',
+        danger: 'bg-red-600 hover:bg-red-500 text-white focus:ring-red-500',
+      };
+      const sizes = {
+        sm: 'px-3 py-1.5 text-sm',
+        md: 'px-5 py-2.5 text-base',
+        lg: 'px-7 py-3.5 text-lg',
+      };
+      return (
+        <button
+          className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${className}`}
+          disabled={disabled}
+          onClick={onClick}
+          {...props}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ label, value, onChange, placeholder, error, maxLength, disabled, className = '' }) {
+      return (
+        <div className={`space-y-1.5 ${className}`}>
+          {label && <label className="block text-sm font-medium text-gray-300">{label}</label>}
+          <input
+            type="text"
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            maxLength={maxLength}
+            disabled={disabled}
+            className={`w-full px-4 py-3 bg-gray-700/60 border rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 transition-all duration-200 ${
+              error ? 'border-red-500 focus:ring-red-500' : 'border-gray-600 focus:ring-purple-500 focus:border-purple-500'
+            } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          />
+          <div className="flex justify-between">
+            {error && <p className="text-red-400 text-xs">{error}</p>}
+            {maxLength && <p className="text-gray-500 text-xs ml-auto">{(value || '').length}/{maxLength}</p>}
+          </div>
+        </div>
+      );
+    }
+
+    function Modal({ isOpen, onClose, title, children, size = 'md' }) {
+      useEffect(() => {
+        if (isOpen) document.body.style.overflow = 'hidden';
+        else document.body.style.overflow = '';
+        return () => { document.body.style.overflow = ''; };
+      }, [isOpen]);
+
+      if (!isOpen) return null;
+
+      const sizes = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' };
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div
+            className={`relative w-full ${sizes[size]} bg-gray-800/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-700/50 fade-in max-h-[90vh] overflow-y-auto`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {title && (
+              <div className="flex items-center justify-between px-6 pt-6 pb-2">
+                <h2 className="text-xl font-bold text-white">{title}</h2>
+                <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-700/50" aria-label="닫기">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            )}
+            <div className="px-6 pb-6">{children}</div>
+          </div>
+        </div>
+      );
+    }
+
+    function Toast({ toast }) {
+      if (!toast) return null;
+      const bgColor = toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600';
+      return (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] toast-enter">
+          <div className={`${bgColor} text-white px-6 py-3 rounded-xl shadow-lg font-medium text-sm`}>
+            {toast.message}
+          </div>
+        </div>
+      );
+    }
+
+    function Skeleton({ className = '' }) {
+      return <div className={`skeleton rounded-xl ${className}`} />;
+    }
+
+    // ========================================
+    // Progress Bar Component
+    // ========================================
+    function VoteProgressBar({ percentA, percentB, voteA, voteB, userChoice, compact = false }) {
+      const heightClass = compact ? 'h-6' : 'h-10';
+      const textClass = compact ? 'text-xs' : 'text-sm font-semibold';
+
+      return (
+        <div className="w-full">
+          <div className={`relative w-full ${heightClass} rounded-full overflow-hidden bg-gray-700/50 flex`}>
+            <div
+              className="progress-bar-a bg-gradient-to-r from-blue-600 to-blue-500 flex items-center justify-start pl-2 relative"
+              style={{ width: `${Math.max(percentA, 8)}%` }}
+            >
+              <span className={`${textClass} text-white drop-shadow whitespace-nowrap`}>
+                {userChoice === 'a' && !compact && '>>> '}{percentA}%
+              </span>
+            </div>
+            <div
+              className="progress-bar-b bg-gradient-to-r from-orange-500 to-red-500 flex items-center justify-end pr-2 relative"
+              style={{ width: `${Math.max(percentB, 8)}%` }}
+            >
+              <span className={`${textClass} text-white drop-shadow whitespace-nowrap`}>
+                {percentB}%{userChoice === 'b' && !compact && ' <<<'}
+              </span>
+            </div>
+          </div>
+          {!compact && (
+            <div className="flex justify-between mt-1.5 text-xs text-gray-400">
+              <span className={userChoice === 'a' ? 'text-blue-400 font-semibold' : ''}>{voteA}표</span>
+              <span className={userChoice === 'b' ? 'text-orange-400 font-semibold' : ''}>{voteB}표</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Thumbnail Component
+    // ========================================
+    function Thumbnail({ url, optionA, optionB, className = '' }) {
+      const [loaded, setLoaded] = useState(false);
+      const [error, setError] = useState(false);
+
+      if (!url || error) {
+        return (
+          <div className={`relative overflow-hidden bg-gradient-to-br from-blue-600/30 via-purple-600/30 to-orange-600/30 flex items-center justify-center ${className}`}>
+            <div className="text-center px-4">
+              <span className="text-3xl block mb-1">VS</span>
+              <p className="text-xs text-gray-400 line-clamp-1">{optionA}</p>
+              <p className="text-xs text-gray-400 line-clamp-1 mt-0.5">{optionB}</p>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className={`relative overflow-hidden ${className}`}>
+          {!loaded && <div className="absolute inset-0 skeleton" />}
+          <img
+            src={url}
+            alt={`${optionA} vs ${optionB}`}
+            className={`w-full h-full object-cover transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+            onLoad={() => setLoaded(true)}
+            onError={() => setError(true)}
+          />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Game Card Component
+    // ========================================
+    function GameCard({ game: initialGame, votedGames, onVote, showToast }) {
+      const [game, setGame] = useState(initialGame);
+      const [likedGames, setLikedGames] = useState(getLikedGames);
+      const [liking, setLiking] = useState(false);
+
+      useEffect(() => { setGame(initialGame); }, [initialGame]);
+
+      const userChoice = votedGames[game.id];
+      const hasVoted = !!userChoice;
+      const isLiked = likedGames.includes(game.id);
+      const isBest = game.is_best || game.like_count >= 5;
+
+      const handleLike = async (e) => {
+        e.stopPropagation();
+        if (liking) return;
+        setLiking(true);
+        const nowLiked = toggleLikedGame(game.id);
+        setLikedGames(getLikedGames());
+        try {
+          const res = await fetch(`${API_BASE_URL}/games/${game.id}/like`, { method: 'POST' });
+          if (!res.ok) throw new Error();
+          const data = await res.json();
+          setGame(data.data || data);
+        } catch {
+          // rollback
+          toggleLikedGame(game.id);
+          setLikedGames(getLikedGames());
+          if (showToast) showToast('좋아요 처리에 실패했습니다', 'error');
+        } finally {
+          setLiking(false);
+        }
+      };
+
+      return (
+        <div className="bg-gray-800/80 backdrop-blur-sm rounded-2xl overflow-hidden border border-gray-700/40 card-hover shadow-lg relative">
+          {isBest && (
+            <div className="absolute top-2 left-2 z-10 bg-yellow-400 text-gray-900 text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow">
+              ⭐ BEST
+            </div>
+          )}
+          <Thumbnail
+            url={game.thumbnail_url}
+            optionA={game.option_a}
+            optionB={game.option_b}
+            className="h-40 w-full"
+          />
+          <div className="p-4 space-y-3">
+            <div className="flex gap-2 items-start">
+              <div className="flex-1 min-w-0">
+                <p className="text-blue-400 font-semibold text-sm line-clamp-2 leading-snug">A. {game.option_a}</p>
+              </div>
+              <span className="text-gray-500 text-xs font-bold mt-0.5 shrink-0">VS</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-orange-400 font-semibold text-sm line-clamp-2 leading-snug text-right">B. {game.option_b}</p>
+              </div>
+            </div>
+
+            {hasVoted && (
+              <VoteProgressBar
+                percentA={game.percent_a}
+                percentB={game.percent_b}
+                voteA={game.vote_a}
+                voteB={game.vote_b}
+                userChoice={userChoice}
+                compact={true}
+              />
+            )}
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400 text-xs">
+                  {game.total > 0 ? `${game.total}명 참여` : '아직 투표 없음'}
+                </span>
+                <button
+                  onClick={handleLike}
+                  disabled={liking}
+                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all ${
+                    isLiked
+                      ? 'bg-pink-500/20 border-pink-500/50 text-pink-400'
+                      : 'bg-gray-700/50 border-gray-600/50 text-gray-400 hover:border-pink-500/50 hover:text-pink-400'
+                  }`}
+                >
+                  {isLiked ? '❤️' : '🤍'} {game.like_count || 0}
+                </button>
+              </div>
+              <Button
+                size="sm"
+                variant={hasVoted ? 'secondary' : 'primary'}
+                onClick={() => onVote(game)}
+                className={hasVoted ? '!text-xs' : '!text-xs'}
+              >
+                {hasVoted ? '결과 보기' : '투표하기'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Vote Modal Component
+    // ========================================
+    function VoteModal({ isOpen, onClose, gameId, onVoted, showToast }) {
+      const { game, loading } = useGameDetail(isOpen ? gameId : null);
+      const [votedGames, setVotedGames] = useState(getVotedGames);
+      const [voting, setVoting] = useState(false);
+
+      const userChoice = game ? votedGames[game.id] : null;
+      const hasVoted = !!userChoice;
+
+      useEffect(() => {
+        setVotedGames(getVotedGames());
+      }, [isOpen]);
+
+      const handleVote = async (choice) => {
+        if (hasVoted || voting || !game) return;
+        setVoting(true);
+        try {
+          const res = await fetch(`${API_BASE_URL}/games/${game.id}/vote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ choice }),
+          });
+          if (!res.ok) throw new Error('투표에 실패했습니다');
+          setVotedGame(game.id, choice);
+          setVotedGames(getVotedGames());
+          if (onVoted) onVoted();
+        } catch (err) {
+          showToast(err.message, 'error');
+        } finally {
+          setVoting(false);
+        }
+      };
+
+      const handleShare = () => {
+        const url = `${window.location.origin}${window.location.pathname}#game-${game.id}`;
+        navigator.clipboard.writeText(url).then(() => {
+          showToast('링크 복사됨!');
+        }).catch(() => {
+          showToast('링크 복사에 실패했습니다', 'error');
+        });
+      };
+
+      if (!isOpen) return null;
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} size="md">
+          {loading || !game ? (
+            <div className="space-y-4 py-4">
+              <Skeleton className="w-full h-48" />
+              <Skeleton className="w-3/4 h-6 mx-auto" />
+              <div className="flex gap-4">
+                <Skeleton className="flex-1 h-24" />
+                <Skeleton className="flex-1 h-24" />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5 slide-up">
+              <Thumbnail
+                url={game.thumbnail_url}
+                optionA={game.option_a}
+                optionB={game.option_b}
+                className="w-full h-52 rounded-xl"
+              />
+
+              {!hasVoted ? (
+                <>
+                  <p className="text-center text-gray-300 text-sm font-medium">당신의 선택은?</p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => handleVote('a')}
+                      disabled={voting}
+                      className="vote-btn flex-1 bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white p-5 rounded-xl font-bold text-base leading-snug border-2 border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/30"
+                    >
+                      <span className="block text-blue-200 text-xs font-medium mb-1.5">A</span>
+                      {game.option_a}
+                    </button>
+                    <button
+                      onClick={() => handleVote('b')}
+                      disabled={voting}
+                      className="vote-btn flex-1 bg-gradient-to-br from-orange-500 to-red-600 hover:from-orange-400 hover:to-red-500 text-white p-5 rounded-xl font-bold text-base leading-snug border-2 border-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-red-900/30"
+                    >
+                      <span className="block text-orange-200 text-xs font-medium mb-1.5">B</span>
+                      {game.option_b}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-4 slide-up">
+                  <div className="flex gap-3 text-sm">
+                    <div className={`flex-1 p-3 rounded-xl border-2 text-center ${userChoice === 'a' ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700 bg-gray-700/20 opacity-60'}`}>
+                      <span className="block text-blue-300 text-xs font-medium mb-1">A {userChoice === 'a' && '(내 선택)'}</span>
+                      <span className="text-white font-semibold">{game.option_a}</span>
+                    </div>
+                    <div className={`flex-1 p-3 rounded-xl border-2 text-center ${userChoice === 'b' ? 'border-orange-500 bg-orange-500/10' : 'border-gray-700 bg-gray-700/20 opacity-60'}`}>
+                      <span className="block text-orange-300 text-xs font-medium mb-1">B {userChoice === 'b' && '(내 선택)'}</span>
+                      <span className="text-white font-semibold">{game.option_b}</span>
+                    </div>
+                  </div>
+
+                  <VoteProgressBar
+                    percentA={game.percent_a}
+                    percentB={game.percent_b}
+                    voteA={game.vote_a}
+                    voteB={game.vote_b}
+                    userChoice={userChoice}
+                  />
+
+                  <p className="text-center text-gray-400 text-sm">
+                    총 <span className="text-white font-bold">{game.total}명</span> 참여
+                  </p>
+
+                  <div className="flex gap-3">
+                    <Button variant="secondary" onClick={handleShare} className="flex-1">
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                      공유하기
+                    </Button>
+                    <Button variant="ghost" onClick={onClose} className="flex-1">닫기</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </Modal>
+      );
+    }
+
+    // ========================================
+    // Create Form Modal Component
+    // ========================================
+    function CreateModal({ isOpen, onClose, onCreated, showToast }) {
+      const [optionA, setOptionA] = useState('');
+      const [optionB, setOptionB] = useState('');
+      const [submitting, setSubmitting] = useState(false);
+      const [errors, setErrors] = useState({});
+
+      useEffect(() => {
+        if (isOpen) {
+          setOptionA('');
+          setOptionB('');
+          setErrors({});
+        }
+      }, [isOpen]);
+
+      const validate = () => {
+        const errs = {};
+        if (!optionA.trim()) errs.a = '선택지 A를 입력해주세요';
+        if (!optionB.trim()) errs.b = '선택지 B를 입력해주세요';
+        if (optionA.trim() === optionB.trim() && optionA.trim()) errs.b = '서로 다른 선택지를 입력해주세요';
+        setErrors(errs);
+        return Object.keys(errs).length === 0;
+      };
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!validate()) return;
+        setSubmitting(true);
+        try {
+          const res = await fetch(`${API_BASE_URL}/games`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ option_a: optionA.trim(), option_b: optionB.trim() }),
+          });
+          if (!res.ok) throw new Error('게임 생성에 실패했습니다');
+          showToast('새로운 밸런스 게임이 만들어졌습니다!');
+          onClose();
+          if (onCreated) onCreated();
+        } catch (err) {
+          showToast(err.message, 'error');
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title="새 밸런스 게임 만들기" size="md">
+          <form onSubmit={handleSubmit} className="space-y-5 mt-3">
+            <Input
+              label="선택지 A"
+              value={optionA}
+              onChange={(e) => setOptionA(e.target.value)}
+              placeholder="예: 시간 여행 능력"
+              maxLength={100}
+              error={errors.a}
+              disabled={submitting}
+            />
+            <Input
+              label="선택지 B"
+              value={optionB}
+              onChange={(e) => setOptionB(e.target.value)}
+              placeholder="예: 독심술 능력"
+              maxLength={100}
+              error={errors.b}
+              disabled={submitting}
+            />
+
+            <p className="text-gray-500 text-xs text-center">
+              썸네일은 AI가 자동으로 생성됩니다
+            </p>
+
+            <Button
+              variant="primary"
+              size="lg"
+              className="w-full"
+              disabled={submitting}
+              type="submit"
+            >
+              {submitting ? (
+                <span className="flex items-center gap-2">
+                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  AI 썸네일 생성 중...
+                </span>
+              ) : '게임 만들기'}
+            </Button>
+          </form>
+        </Modal>
+      );
+    }
+
+    // ========================================
+    // Header Component
+    // ========================================
+    function Header({ onCreateClick }) {
+      return (
+        <header className="text-center pt-10 pb-6 px-4">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">
+            <span className="mr-2">&#x2696;&#xFE0F;</span>밸런스 게임
+          </h1>
+          <p className="text-purple-300/80 mt-2 text-lg font-medium">당신의 선택은?</p>
+          <div className="mt-5">
+            <Button variant="primary" size="lg" onClick={onCreateClick} className="pulse-glow">
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              새 질문 만들기
+            </Button>
+          </div>
+        </header>
+      );
+    }
+
+    // ========================================
+    // Sort Tabs Component
+    // ========================================
+    function SortTabs({ current, onChange }) {
+      const tabs = [
+        { key: 'popular', label: '인기순' },
+        { key: 'latest', label: '최신순' },
+        { key: 'oldest', label: '오래된순' },
+      ];
+      return (
+        <div className="flex justify-center gap-2 mb-6">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => onChange(tab.key)}
+              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                current === tab.key
+                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+                  : 'bg-gray-800/60 text-gray-400 hover:bg-gray-700/60 hover:text-gray-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Empty State Component
+    // ========================================
+    function EmptyState({ onCreateClick }) {
+      return (
+        <div className="text-center py-20 px-4">
+          <div className="text-6xl mb-4 opacity-50">&#x2696;&#xFE0F;</div>
+          <h3 className="text-xl font-bold text-gray-300 mb-2">아직 게임이 없습니다</h3>
+          <p className="text-gray-500 mb-6">첫 번째 밸런스 게임을 만들어보세요!</p>
+          <Button variant="primary" onClick={onCreateClick}>새 질문 만들기</Button>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Loading Grid Component
+    // ========================================
+    function LoadingGrid() {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="bg-gray-800/80 rounded-2xl overflow-hidden border border-gray-700/40">
+              <Skeleton className="h-40 w-full !rounded-none" />
+              <div className="p-4 space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-2/3" />
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-8 w-20" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const [sort, setSort] = useState('latest');
+      const [createOpen, setCreateOpen] = useState(false);
+      const [voteGameId, setVoteGameId] = useState(null);
+      const [votedGames, setVotedGames] = useState(getVotedGames);
+      const { toast, showToast } = useToast();
+      const { games, loading, error, refetch } = useGames(sort);
+
+      // Handle #game-{id} on load
+      useEffect(() => {
+        const hash = window.location.hash;
+        const match = hash.match(/^#game-(\d+)$/);
+        if (match) {
+          setVoteGameId(parseInt(match[1], 10));
+        }
+      }, []);
+
+      const handleOpenVote = (game) => {
+        setVoteGameId(game.id);
+        window.location.hash = `game-${game.id}`;
+      };
+
+      const handleCloseVote = () => {
+        setVoteGameId(null);
+        history.replaceState(null, '', window.location.pathname);
+        setVotedGames(getVotedGames());
+        refetch();
+      };
+
+      const handleVoted = () => {
+        setVotedGames(getVotedGames());
+      };
+
+      const handleCreated = () => {
+        refetch();
+      };
+
+      return (
+        <div className="min-h-screen">
+          <Header onCreateClick={() => setCreateOpen(true)} />
+
+          <main className="max-w-3xl mx-auto px-4 pb-12">
+            <SortTabs current={sort} onChange={setSort} />
+
+            {error && (
+              <div className="text-center py-10">
+                <p className="text-red-400 mb-4">{error}</p>
+                <Button variant="secondary" onClick={refetch}>다시 시도</Button>
+              </div>
+            )}
+
+            {loading && !error && <LoadingGrid />}
+
+            {!loading && !error && games.length === 0 && (
+              <EmptyState onCreateClick={() => setCreateOpen(true)} />
+            )}
+
+            {!loading && !error && games.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {games.map((game) => (
+                  <GameCard
+                    key={game.id}
+                    game={game}
+                    votedGames={votedGames}
+                    onVote={handleOpenVote}
+                    showToast={showToast}
+                  />
+                ))}
+              </div>
+            )}
+          </main>
+
+          <footer className="text-center pb-8 text-gray-600 text-xs">
+            &copy; 2026 밸런스 게임. All rights reserved.
+          </footer>
+
+          <VoteModal
+            isOpen={!!voteGameId}
+            gameId={voteGameId}
+            onClose={handleCloseVote}
+            onVoted={handleVoted}
+            showToast={showToast}
+          />
+
+          <CreateModal
+            isOpen={createOpen}
+            onClose={() => setCreateOpen(false)}
+            onCreated={handleCreated}
+            showToast={showToast}
+          />
+
+          <Toast toast={toast} />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
